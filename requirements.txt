@@ -1,0 +1,15 @@
+# Bit2Try 项目依赖
+# 复数神经网络量化与联邦学习实验框架
+
+# 核心
+tensorflow>=2.10.0
+numpy>=1.21.0
+
+# 音频处理 (仅数据预处理脚本需要)
+librosa>=0.9.0
+
+# 可视化 (可选, 仅 test.py/test2.py 差分隐私实验需要)
+matplotlib>=3.5.0
+
+# 数据处理 (可选)
+scikit-learn>=1.0.0
