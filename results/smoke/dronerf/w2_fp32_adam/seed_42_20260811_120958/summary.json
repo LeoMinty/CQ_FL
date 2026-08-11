@@ -1,0 +1,33 @@
+{
+  "config": {
+    "dataset": "dronerf",
+    "method": "w2_fp32_adam",
+    "data_path": "dronerf_processed/dronerf_drf2_complex.npz",
+    "output_root": "results/smoke",
+    "batch_size": 8,
+    "learning_rate": 0.0003,
+    "block_size": 64,
+    "seed": 42,
+    "clients": 5,
+    "rounds": 1,
+    "local_epochs": 1,
+    "max_train_samples": 40,
+    "max_test_samples": 32
+  },
+  "implementation": {
+    "core": "BitMyConv_noMul.ComplexConv2D",
+    "weight_quantizer": "original unit {+1,+i,-1,-i}",
+    "federated_update": "FedAvg client delta",
+    "optimizer": "w2_fp32_adam"
+  },
+  "best_test_accuracy": 1.0,
+  "final_test_accuracy": 1.0,
+  "parameter_count": 605444,
+  "notes": [
+    "All four methods use one complex architecture and parameter layout.",
+    "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
+    "CA-4bit preserves component-wise Adam second-moment equations.",
+    "CQ-FL uploads a phase-quantized FedAvg client update, not a per-batch raw gradient.",
+    "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32."
+  ]
+}

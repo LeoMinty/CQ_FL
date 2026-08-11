@@ -1,0 +1,33 @@
+{
+  "config": {
+    "dataset": "ravdess",
+    "method": "signsgd",
+    "data_path": "ravdess_processed/ravdess_c3_stft.npz",
+    "output_root": "results/experiment1_final",
+    "batch_size": 32,
+    "learning_rate": 0.0003,
+    "block_size": 64,
+    "seed": 2024,
+    "clients": 2,
+    "rounds": 50,
+    "local_epochs": 2,
+    "max_train_samples": 0,
+    "max_test_samples": 0
+  },
+  "implementation": {
+    "core": "BitMyConv_noMul.ComplexConv2D",
+    "weight_quantizer": "original unit {+1,+i,-1,-i}",
+    "federated_update": "FedAvg client delta",
+    "optimizer": "signsgd"
+  },
+  "best_test_accuracy": 0.4027777777777778,
+  "final_test_accuracy": 0.3888888888888889,
+  "parameter_count": 6373128,
+  "notes": [
+    "All four methods use one complex architecture and parameter layout.",
+    "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
+    "CA-4bit preserves component-wise Adam second-moment equations.",
+    "CQ-FL uploads a phase-quantized FedAvg client update, not a per-batch raw gradient.",
+    "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32."
+  ]
+}

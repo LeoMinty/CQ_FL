@@ -1,0 +1,15 @@
+{
+  "dataset": "ravdess",
+  "method": "fedavg_fp32",
+  "data_path": "ravdess_processed/ravdess_c3_stft.npz",
+  "output_root": "results/experiment1_final",
+  "batch_size": 32,
+  "learning_rate": 0.0003,
+  "block_size": 64,
+  "seed": 123,
+  "clients": 2,
+  "rounds": 50,
+  "local_epochs": 2,
+  "max_train_samples": 0,
+  "max_test_samples": 0
+}

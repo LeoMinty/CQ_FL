@@ -1,0 +1,15 @@
+{
+  "dataset": "mnist",
+  "method": "fedavg_fp32",
+  "data_path": "",
+  "output_root": "results/smoke",
+  "batch_size": 8,
+  "learning_rate": 0.0003,
+  "block_size": 64,
+  "seed": 42,
+  "clients": 10,
+  "rounds": 1,
+  "local_epochs": 1,
+  "max_train_samples": 80,
+  "max_test_samples": 32
+}

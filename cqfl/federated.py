@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import random
+import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -169,7 +170,16 @@ class BitFLOffloadTrainer:
                 with tf.device("/CPU:0"):
                     for gradient, master in zip(gradients, self.master_weights):
                         if gradient is not None:
-                            cpu_gradient = tf.convert_to_tensor(gradient.numpy(), dtype=master.dtype)
+                            gradient_array = np.asarray(gradient.numpy(), dtype=np.float32)
+                            # CA4BitAdam performs its state update with NumPy.
+                            # Passing the array directly avoids converting the
+                            # same gradient Tensor GPU -> CPU Tensor -> NumPy.
+                            if self.method == "cqfl":
+                                cpu_gradient = gradient_array
+                            else:
+                                cpu_gradient = tf.convert_to_tensor(
+                                    gradient_array, dtype=master.dtype
+                                )
                             pairs.append((cpu_gradient, master))
                     if self.method == "signsgd":
                         for gradient, master in pairs:
@@ -279,12 +289,14 @@ def run(config: ExperimentConfig) -> Path:
         "uplink_bytes",
         "downlink_bytes",
         "optimizer_state_bytes",
+        "round_seconds",
     ]
     history = []
     with (output / "metrics.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for round_index in range(1, config.rounds + 1):
+            round_started = time.perf_counter()
             broadcast_trainable, trainable_downlink = _quantized_broadcast(
                 global_trainable, config.method, bitfl_kernel_mask
             )
@@ -349,13 +361,15 @@ def run(config: ExperimentConfig) -> Path:
                 "optimizer_state_bytes": int(
                     sum(client.optimizer_state_bytes for client in clients)
                 ),
+                "round_seconds": time.perf_counter() - round_started,
             }
             writer.writerow(row)
             handle.flush()
             history.append(row)
             print(
                 f"[{config.dataset}/{config.method}] round {round_index:03d}/{config.rounds}: "
-                f"loss={test_loss:.4f}, acc={test_accuracy:.4f}"
+                f"loss={test_loss:.4f}, acc={test_accuracy:.4f}, "
+                f"time={row['round_seconds']:.1f}s"
             )
 
     summary = {

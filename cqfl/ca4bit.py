@@ -7,10 +7,12 @@ Persistent state layout
   shape, encoded with the zero-excluding 4-bit linear map;
 * real-valued parameters: 4-bit signed first moment and zero-excluding 4-bit
   second moment;
-* one FP16 scale per block of 64 values.
+* one FP32 scale per block of 64 values.  FP32 is required here because Adam's
+  second moment can be smaller than the FP16 subnormal range.
 
-Only one parameter tensor is decompressed at a time.  This is an eager-mode
-research implementation: it favours a transparent state format over speed.
+Only one parameter tensor is decompressed at a time.  Block operations are
+vectorized in bounded chunks so the stored format and quantization rule stay
+unchanged without paying one Python-loop iteration per 64 values.
 """
 
 from __future__ import annotations
@@ -21,6 +23,12 @@ from typing import Dict, Iterable, Optional, Sequence, Tuple
 import numpy as np
 
 from .quantization import phase_codes_np
+
+
+# At block size 64 this bounds the temporary nearest-code array to roughly
+# 16 MiB (4096 * 64 * 16 float32 values), while replacing tens of thousands of
+# Python loop iterations with a few NumPy kernels.
+_VECTOR_BLOCK_CHUNK = 4096
 
 try:
     import tensorflow as tf
@@ -125,8 +133,31 @@ class MomentState:
 
 
 def _nearest_codes(normalized: np.ndarray, codebook: np.ndarray) -> np.ndarray:
-    distances = np.abs(normalized[:, None] - codebook[None, :])
-    return np.argmin(distances, axis=1).astype(np.uint8)
+    """Return the legacy argmin code without forming an N x 16 matrix.
+
+    Every codebook is sorted.  A binary insertion search therefore leaves only
+    the two adjacent candidates to compare.  The strict comparison preserves
+    the legacy ``argmin`` rule of choosing the lower code on an exact tie.
+    """
+    normalized = np.asarray(normalized, dtype=np.float32).reshape(-1)
+    right = np.searchsorted(codebook, normalized, side="left")
+    right = np.minimum(right, len(codebook) - 1)
+    left = np.maximum(right - 1, 0)
+    left_distance = np.abs(normalized - codebook[left])
+    right_distance = np.abs(normalized - codebook[right])
+    codes = np.where(right_distance < left_distance, right, left).astype(np.uint8)
+
+    # DE4_SIGNED contains a duplicated zero.  np.argmin selected the first
+    # duplicate, so canonicalize duplicate codes to keep packed bytes equal to
+    # the previous implementation rather than merely reconstructing equally.
+    canonical = np.arange(len(codebook), dtype=np.uint8)
+    for index in range(1, len(codebook)):
+        if codebook[index] == codebook[index - 1]:
+            canonical[index] = canonical[index - 1]
+    codes = canonical[codes]
+    # Match np.argmin on an all-NaN distance row.
+    codes[~np.isfinite(normalized)] = 0
+    return codes
 
 
 def quantize_block4(
@@ -136,6 +167,8 @@ def quantize_block4(
 ) -> Block4Tensor:
     values = np.asarray(values, dtype=np.float32)
     flat = values.reshape(-1)
+    if block_size <= 0:
+        raise ValueError("block_size must be positive")
     if mapping == "unsigned_de":
         codebook = DE4_UNSIGNED
     elif mapping == "signed_de":
@@ -145,24 +178,50 @@ def quantize_block4(
     else:
         raise ValueError(f"unknown 4-bit mapping: {mapping}")
 
-    codes = np.empty(flat.size, dtype=np.uint8)
-    scales = np.empty((flat.size + block_size - 1) // block_size, dtype=np.float16)
-    for block_index, start in enumerate(range(0, flat.size, block_size)):
-        block = flat[start : start + block_size]
-        scale = float(np.max(np.abs(block))) if block.size else 0.0
-        scales[block_index] = np.float16(scale)
-        if scale == 0.0:
-            codes[start : start + block.size] = 0
-            continue
-        normalized = block / scale
-        if mapping != "signed_de":
-            normalized = np.clip(normalized, 0.0, 1.0)
-        codes[start : start + block.size] = _nearest_codes(normalized, codebook)
+    count = int(flat.size)
+    block_count = (count + block_size - 1) // block_size
+    codes = np.empty(count, dtype=np.uint8)
+    scales = np.empty(block_count, dtype=np.float32)
+
+    if count:
+        padded_count = block_count * block_size
+        if padded_count == count:
+            padded = flat
+        else:
+            padded = np.zeros(padded_count, dtype=np.float32)
+            padded[:count] = flat
+        blocks = padded.reshape(block_count, block_size)
+        scales[:] = np.max(np.abs(blocks), axis=1).astype(np.float32, copy=False)
+
+        for first_block in range(0, block_count, _VECTOR_BLOCK_CHUNK):
+            last_block = min(first_block + _VECTOR_BLOCK_CHUNK, block_count)
+            block_chunk = blocks[first_block:last_block]
+            scale_chunk = scales[first_block:last_block, None]
+            normalized = np.divide(
+                block_chunk,
+                scale_chunk,
+                out=np.zeros_like(block_chunk),
+                where=scale_chunk != 0.0,
+            )
+            if mapping != "signed_de":
+                np.clip(normalized, 0.0, 1.0, out=normalized)
+
+            encoded = _nearest_codes(normalized.reshape(-1), codebook).reshape(
+                last_block - first_block, block_size
+            )
+            # Preserve the legacy representation for an all-zero block.  The
+            # scale is zero, so every code reconstructs to zero, but code 0 is
+            # what the previous implementation stored.
+            encoded[scale_chunk[:, 0] == 0.0] = 0
+            first_value = first_block * block_size
+            last_value = min(last_block * block_size, count)
+            codes[first_value:last_value] = encoded.reshape(-1)[: last_value - first_value]
+
     return Block4Tensor(
         packed=pack_nibbles(codes),
         scales=scales,
         shape=tuple(values.shape),
-        count=int(flat.size),
+        count=count,
         block_size=int(block_size),
         mapping=mapping,
     )
@@ -176,11 +235,12 @@ def dequantize_block4(state: Block4Tensor) -> np.ndarray:
     }
     codebook = codebooks[state.mapping]
     codes = unpack_nibbles(state.packed, state.count)
-    out = np.empty(state.count, dtype=np.float32)
-    for block_index, start in enumerate(range(0, state.count, state.block_size)):
-        end = min(start + state.block_size, state.count)
-        scale = np.float32(state.scales[block_index])
-        out[start:end] = codebook[codes[start:end]] * scale
+    if state.count == 0:
+        return np.empty(state.shape, dtype=np.float32)
+    element_scales = np.repeat(
+        np.asarray(state.scales, dtype=np.float32), state.block_size
+    )[: state.count]
+    out = codebook[codes] * element_scales
     return out.reshape(state.shape)
 
 
