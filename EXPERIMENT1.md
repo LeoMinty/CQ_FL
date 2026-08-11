@@ -11,8 +11,9 @@
 | DroneRF/DRF-2 | 5 | 100 | 2 | 4 |
 | MNIST Non-IID | 10 | 50 | 2 | 10 |
 
-共同参数：batch size 32、学习率 `3e-4`、CA-4bit block size 64、默认随机种子
-42。四种方法是 `fedavg_fp32`、`signsgd`、`w2_fp32_adam`、`cqfl`。
+共同参数：batch size 32、学习率 `3e-4`、CA-4bit block size 64。论文正式结果固定
+使用随机种子 `42`、`123`、`2024`。四种方法是 `fedavg_fp32`、`signsgd`、
+`w2_fp32_adam`、`cqfl`。
 
 四种方法现在共用同一套复数网络和参数布局。正式入口直接复用原项目的
 `BitMyConv_noMul.ComplexConv2D`、`simplified_complex_matmul`、
@@ -52,31 +53,67 @@ python run_experiment1.py --dataset mnist --method all \
   --max-train-samples 3200 --max-test-samples 1000
 ```
 
-冒烟测试通过后，运行正式配置：
+冒烟测试通过后，使用一个全新的正式结果目录。不要把 smoke、pilot 或不同参数的结果
+写入该目录。RAVDESS、MNIST 与 DroneRF 均使用相同的三个种子：
 
 ```bash
-python run_experiment1.py --dataset mnist --method all
-python run_experiment1.py --dataset ravdess --method all
-python run_experiment1.py --dataset dronerf --method all
+export TF_CPP_MIN_LOG_LEVEL=3
+export TF_DETERMINISTIC_OPS=1
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
+
+for seed in 42 123 2024; do
+  PYTHONHASHSEED=$seed python -u run_experiment1.py \
+    --dataset ravdess --method all --seed "$seed" \
+    --output-root results/experiment1_final
+done
+
+for seed in 42 123 2024; do
+  PYTHONHASHSEED=$seed python -u run_experiment1.py \
+    --dataset mnist --method all --seed "$seed" \
+    --output-root results/experiment1_final
+done
+
+for seed in 42 123 2024; do
+  PYTHONHASHSEED=$seed python -u run_experiment1.py \
+    --dataset dronerf --method all --seed "$seed" \
+    --output-root results/experiment1_final
+done
 ```
 
 每次运行写入独立目录：
 
 ```text
-results/experiment1/<dataset>/<method>/seed_<seed>_<timestamp>/
+results/experiment1_final/<dataset>/<method>/seed_<seed>_<timestamp>/
   config.json
   metrics.csv
   summary.json
 ```
 
-论文正式结果建议至少使用 3 个种子（例如 42、43、44），报告均值和标准差。实验一作图
-可直接运行：
+三个数据集都必须使用同一组种子，不能按数据集选择更有利的种子。当前实现中，RAVDESS
+和 DroneRF 的 seed 同时控制数据/物理组划分、客户端分配和训练随机性；MNIST 使用固定官方
+测试集，seed 控制 Non-IID shard 分配和训练随机性。论文中应明确说明这一点。
+
+正式绘图工具默认严格要求 `42`、`123`、`2024` 各出现一次，并检查四种方法的配置和轮数
+完全一致。缺少种子、重复运行、混入额外种子、配置不同或轮数不完整都会报错。运行：
 
 ```bash
-python plot_experiment1.py --dataset mnist
-python plot_experiment1.py --dataset ravdess
-python plot_experiment1.py --dataset dronerf
+python plot_experiment1.py --dataset mnist \
+  --results-root results/experiment1_final --seeds 42 123 2024
+python plot_experiment1.py --dataset ravdess \
+  --results-root results/experiment1_final --seeds 42 123 2024
+python plot_experiment1.py --dataset dronerf \
+  --results-root results/experiment1_final --seeds 42 123 2024
 ```
+
+每个数据集会生成一份 PDF 曲线和一份 CSV 汇总。例如：
+
+```text
+results/experiment1_final/ravdess_accuracy_vs_round.pdf
+results/experiment1_final/ravdess_accuracy_summary.csv
+```
+
+如果绘图工具报告某个种子重复，应把旧的重复运行目录移出正式结果根目录，而不是让脚本
+自动选择一次运行。
 
 ## 实现边界
 
@@ -88,7 +125,8 @@ python plot_experiment1.py --dataset dronerf
   FP32。CQ-FL 对所有复数梯度/客户端更新应用相位量化，实值分类头保持 FP32。
 - CA-4bit 的一阶复数动量持久化为 2-bit 相位和 4-bit 幅度。二阶动量保持标准Adam的
   原始形状，实部和虚部各自维护独立状态，再分别使用排除零点的4-bit线性映射；每64个值
-  保存一个FP16 scale。因此4-bit只改变状态存储，不把Adam改成共享分母的另一种算法。
+  保存一个FP32 scale。FP32 scale 是块量化元数据，用于避免Adam二阶矩在FP16范围内下溢；
+  块内状态编码仍为4-bit。CA-4bit只改变状态存储，不把Adam改成共享分母的另一种算法。
 - 客户端继续使用原BitFL的CPU FP32主权重/计算影子路径。CA-4bit取代的是持久化Adam状态，
   不是原有2-bit卷积模块。
 - 联邦主循环以 FedAvg 模型增量实现本地两 epoch。CQ-FL 上传复数模型增量的 2-bit 相位编码，
