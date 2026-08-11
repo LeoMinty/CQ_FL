@@ -1,0 +1,2 @@
+[mnist/cqfl] round 001/1: loss=2.0806, acc=0.2810, time=159.7s
+completed: results/mnist_timing_b128/mnist/cqfl/seed_42_20260811_190347

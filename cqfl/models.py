@@ -15,7 +15,12 @@ from Bit2Linear import RealToComplex, TakeReal
 from BitMyConv_noMul import ComplexBatchNormalization, ComplexConv2D
 
 
-def build_model(input_shape, num_classes: int, method: str):
+def build_model(
+    input_shape,
+    num_classes: int,
+    method: str,
+    model_profile: str = "standard",
+):
     """Build one common architecture for all experiment-one methods.
 
     ``w2_fp32_adam`` and ``cqfl`` share the exact same 2-bit forward operator.
@@ -25,6 +30,14 @@ def build_model(input_shape, num_classes: int, method: str):
     """
     if method not in {"fedavg_fp32", "signsgd", "w2_fp32_adam", "cqfl"}:
         raise ValueError(f"unknown method: {method}")
+    if model_profile == "standard":
+        convolution_filters = (16, 32, 64)
+        dense_units = (256, 128)
+    elif model_profile == "mnist_small":
+        convolution_filters = (8, 16)
+        dense_units = (64,)
+    else:
+        raise ValueError(f"unknown model profile: {model_profile}")
 
     quantized_weight = method in {"w2_fp32_adam", "cqfl"}
     quantized_gradient = method == "cqfl"
@@ -34,7 +47,7 @@ def build_model(input_shape, num_classes: int, method: str):
     if len(input_shape) != 4 or input_shape[-1] != 2:
         x = RealToComplex(name="real_to_complex")(x)
 
-    for filters in (16, 32, 64):
+    for filters in convolution_filters:
         x = ComplexConv2D(
             filters=filters,
             kernel_size=3,
@@ -50,9 +63,14 @@ def build_model(input_shape, num_classes: int, method: str):
 
     x = TakeReal(name="take_real")(x)
     x = tf.keras.layers.Flatten(name="flatten")(x)
-    x = tf.keras.layers.Dense(256, activation="relu", name="dense_256")(x)
-    x = tf.keras.layers.Dense(128, activation="relu", name="dense_128")(x)
+    for units in dense_units:
+        x = tf.keras.layers.Dense(
+            units, activation="relu", name=f"dense_{units}"
+        )(x)
     outputs = tf.keras.layers.Dense(num_classes, name="logits")(x)
-    model = tf.keras.Model(inputs, outputs, name=f"bitfl_{method}")
+    model = tf.keras.Model(
+        inputs, outputs, name=f"bitfl_{method}_{model_profile}"
+    )
     model.bitfl_method = method
+    model.bitfl_model_profile = model_profile
     return model

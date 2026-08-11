@@ -1,0 +1,2 @@
+[mnist/w2_fp32_adam] round 001/1: loss=1.9894, acc=0.3148, time=148.4s
+completed: results/mnist_timing_b128/mnist/w2_fp32_adam/seed_42_20260811_190105

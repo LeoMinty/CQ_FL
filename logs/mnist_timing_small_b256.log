@@ -1,0 +1,12 @@
+[mnist/fedavg_fp32] round 001/2: loss=2.2821, acc=0.1734, time=40.7s
+[mnist/fedavg_fp32] round 002/2: loss=2.2508, acc=0.1417, time=38.2s
+completed: results/mnist_timing_small_b256/mnist/fedavg_fp32/seed_42_20260811_193207
+[mnist/signsgd] round 001/2: loss=2.3095, acc=0.1451, time=31.0s
+[mnist/signsgd] round 002/2: loss=2.3177, acc=0.1310, time=30.7s
+completed: results/mnist_timing_small_b256/mnist/signsgd/seed_42_20260811_193329
+[mnist/w2_fp32_adam] round 001/2: loss=2.2464, acc=0.2202, time=51.9s
+[mnist/w2_fp32_adam] round 002/2: loss=1.9519, acc=0.3222, time=51.0s
+completed: results/mnist_timing_small_b256/mnist/w2_fp32_adam/seed_42_20260811_193438
+[mnist/cqfl] round 001/2: loss=2.2628, acc=0.2072, time=50.0s
+[mnist/cqfl] round 002/2: loss=2.0436, acc=0.2926, time=52.5s
+completed: results/mnist_timing_small_b256/mnist/cqfl/seed_42_20260811_193626

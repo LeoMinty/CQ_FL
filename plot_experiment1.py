@@ -36,6 +36,7 @@ COMPARABLE_CONFIG_FIELDS = (
     "block_size",
     "max_train_samples",
     "max_test_samples",
+    "model_profile",
 )
 
 

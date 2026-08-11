@@ -318,7 +318,15 @@ class CA4BitAdam:
 
         for gradient, variable in pairs:
             key = id(variable)
-            state = self._states.setdefault(key, self._zero_state(variable))
+            # ``dict.setdefault(key, self._zero_state(...))`` evaluates the
+            # default expression even when ``key`` already exists.  On every
+            # batch that needlessly allocated and quantized two all-zero
+            # tensors per parameter.  Initialize once without changing the
+            # stored state or any optimizer arithmetic.
+            state = self._states.get(key)
+            if state is None:
+                state = self._zero_state(variable)
+                self._states[key] = state
             grad = np.asarray(gradient.numpy() if hasattr(gradient, "numpy") else gradient, np.float32)
             if state.complex_parameter:
                 first = dequantize_complex_first(state.first)

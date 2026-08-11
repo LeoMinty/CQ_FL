@@ -1,0 +1,2 @@
+round,train_loss,test_loss,test_accuracy,uplink_bytes,downlink_bytes,optimizer_state_bytes,round_seconds
+1,0.0360675712782845,2.1467464012145996,0.2943,9175440,9175440,18315120,386.80253364518285

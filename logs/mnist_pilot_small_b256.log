@@ -1,0 +1,24 @@
+[mnist/fedavg_fp32] round 001/5: loss=2.2821, acc=0.1734, time=42.5s
+[mnist/fedavg_fp32] round 002/5: loss=2.2508, acc=0.1417, time=40.8s
+[mnist/fedavg_fp32] round 003/5: loss=2.1895, acc=0.1561, time=40.5s
+[mnist/fedavg_fp32] round 004/5: loss=2.1065, acc=0.1673, time=40.3s
+[mnist/fedavg_fp32] round 005/5: loss=1.9455, acc=0.2883, time=39.4s
+completed: results/mnist_pilot_small_b256/mnist/fedavg_fp32/seed_42_20260811_194257
+[mnist/signsgd] round 001/5: loss=2.3095, acc=0.1451, time=31.5s
+[mnist/signsgd] round 002/5: loss=2.3177, acc=0.1310, time=32.0s
+[mnist/signsgd] round 003/5: loss=2.3214, acc=0.1420, time=32.2s
+[mnist/signsgd] round 004/5: loss=2.3155, acc=0.1594, time=32.6s
+[mnist/signsgd] round 005/5: loss=2.2951, acc=0.1775, time=31.6s
+completed: results/mnist_pilot_small_b256/mnist/signsgd/seed_42_20260811_194624
+[mnist/w2_fp32_adam] round 001/5: loss=2.2464, acc=0.2202, time=51.9s
+[mnist/w2_fp32_adam] round 002/5: loss=1.9519, acc=0.3222, time=52.7s
+[mnist/w2_fp32_adam] round 003/5: loss=1.7025, acc=0.4295, time=51.8s
+[mnist/w2_fp32_adam] round 004/5: loss=1.5092, acc=0.5200, time=51.6s
+[mnist/w2_fp32_adam] round 005/5: loss=1.2900, acc=0.6279, time=52.3s
+completed: results/mnist_pilot_small_b256/mnist/w2_fp32_adam/seed_42_20260811_194911
+[mnist/cqfl] round 001/5: loss=2.2628, acc=0.2072, time=50.3s
+[mnist/cqfl] round 002/5: loss=2.0436, acc=0.2926, time=52.2s
+[mnist/cqfl] round 003/5: loss=1.7915, acc=0.4120, time=54.2s
+[mnist/cqfl] round 004/5: loss=1.6371, acc=0.4880, time=52.4s
+[mnist/cqfl] round 005/5: loss=1.3791, acc=0.6232, time=53.1s
+completed: results/mnist_pilot_small_b256/mnist/cqfl/seed_42_20260811_195336

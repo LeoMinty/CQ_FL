@@ -1,0 +1,34 @@
+{
+  "config": {
+    "dataset": "mnist",
+    "method": "signsgd",
+    "data_path": "",
+    "output_root": "results/mnist_timing_small_b128",
+    "batch_size": 128,
+    "learning_rate": 0.0003,
+    "block_size": 64,
+    "seed": 42,
+    "clients": 10,
+    "rounds": 2,
+    "local_epochs": 2,
+    "max_train_samples": 0,
+    "max_test_samples": 0,
+    "model_profile": "mnist_small"
+  },
+  "implementation": {
+    "core": "BitMyConv_noMul.ComplexConv2D",
+    "weight_quantizer": "original unit {+1,+i,-1,-i}",
+    "federated_update": "FedAvg client delta",
+    "optimizer": "signsgd"
+  },
+  "best_test_accuracy": 0.1495,
+  "final_test_accuracy": 0.1495,
+  "parameter_count": 53578,
+  "notes": [
+    "All four methods use one complex architecture and parameter layout.",
+    "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
+    "CA-4bit preserves component-wise Adam second-moment equations.",
+    "CQ-FL uploads a phase-quantized FedAvg client update, not a per-batch raw gradient.",
+    "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32."
+  ]
+}

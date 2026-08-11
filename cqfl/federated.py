@@ -104,7 +104,14 @@ class BitFLOffloadTrainer:
             elif method == "signsgd":
                 self.optimizer = None
             else:
-                self.optimizer = tf.keras.optimizers.Adam(config.learning_rate)
+                # The optimizer is deliberately executed on CPU in this
+                # offload trainer.  XLA-compiling one update function for each
+                # client adds substantial tracing cost (especially for the 10
+                # MNIST clients) and produced repeated _update_step_xla traces.
+                # Disabling JIT changes execution only, not the Adam equations.
+                self.optimizer = tf.keras.optimizers.Adam(
+                    config.learning_rate, jit_compile=False
+                )
 
     def _sync_master_to_compute(self) -> None:
         for compute, master in zip(self.model.trainable_variables, self.master_weights):
@@ -253,7 +260,12 @@ def run(config: ExperimentConfig) -> Path:
         load_dataset(config.dataset, config.data_path, config.clients, config.seed), config
     )
 
-    global_model = build_model(bundle.input_shape, bundle.num_classes, config.method)
+    global_model = build_model(
+        bundle.input_shape,
+        bundle.num_classes,
+        config.method,
+        config.model_profile,
+    )
     _ = global_model(tf.zeros((1, *bundle.input_shape), tf.float32), training=False)
     global_trainable = [np.asarray(v.numpy(), np.float32) for v in global_model.trainable_variables]
     global_non_trainable = [
@@ -271,7 +283,12 @@ def run(config: ExperimentConfig) -> Path:
     clients: List[BitFLOffloadTrainer] = []
     for client_id in range(config.clients):
         set_determinism(config.seed + client_id)
-        model = build_model(bundle.input_shape, bundle.num_classes, config.method)
+        model = build_model(
+            bundle.input_shape,
+            bundle.num_classes,
+            config.method,
+            config.model_profile,
+        )
         _ = model(tf.zeros((1, *bundle.input_shape), tf.float32), training=False)
         clients.append(BitFLOffloadTrainer(model, config.method, config))
 

@@ -7,7 +7,7 @@ import gc
 
 import tensorflow as tf
 
-from cqfl.config import METHOD_NAMES, ExperimentConfig
+from cqfl.config import METHOD_NAMES, MODEL_PROFILES, ExperimentConfig
 from cqfl.federated import run
 
 
@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument("--block-size", type=int, default=64)
     parser.add_argument("--max-train-samples", type=int, default=0)
     parser.add_argument("--max-test-samples", type=int, default=0)
+    parser.add_argument("--model-profile", choices=MODEL_PROFILES, default="standard")
     return parser.parse_args()
 
 
@@ -47,6 +48,7 @@ def main():
             local_epochs=args.local_epochs,
             max_train_samples=args.max_train_samples,
             max_test_samples=args.max_test_samples,
+            model_profile=args.model_profile,
         )
         output = run(config)
         print(f"completed: {output}")

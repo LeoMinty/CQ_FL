@@ -1,0 +1,15 @@
+{
+  "dataset": "mnist",
+  "method": "w2_fp32_adam",
+  "data_path": "",
+  "output_root": "results/mnist_timing_b128",
+  "batch_size": 128,
+  "learning_rate": 0.0003,
+  "block_size": 64,
+  "seed": 42,
+  "clients": 10,
+  "rounds": 1,
+  "local_epochs": 2,
+  "max_train_samples": 0,
+  "max_test_samples": 0
+}

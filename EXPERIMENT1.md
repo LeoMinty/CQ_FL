@@ -11,9 +11,10 @@
 | DroneRF/DRF-2 | 5 | 100 | 2 | 4 |
 | MNIST Non-IID | 10 | 50 | 2 | 10 |
 
-共同参数：batch size 32、学习率 `3e-4`、CA-4bit block size 64。论文正式结果固定
-使用随机种子 `42`、`123`、`2024`。四种方法是 `fedavg_fp32`、`signsgd`、
-`w2_fp32_adam`、`cqfl`。
+共同参数：学习率 `3e-4`、CA-4bit block size 64。RAVDESS 与 DroneRF 的 batch size
+固定为 32；MNIST 先用 pilot 在 128 与 256 中选定一个，此后四种方法和三个种子保持
+一致。论文正式结果固定使用随机种子 `42`、`123`、`2024`。四种方法是
+`fedavg_fp32`、`signsgd`、`w2_fp32_adam`、`cqfl`。
 
 四种方法现在共用同一套复数网络和参数布局。正式入口直接复用原项目的
 `BitMyConv_noMul.ComplexConv2D`、`simplified_complex_matmul`、
@@ -43,13 +44,47 @@ python prepare_dronerf.py \
 MNIST 由 TensorFlow 自动下载，采用经典 shard 划分，每个客户端恰好两个 shard，近似
 满足“每客户端两个数字类别”。
 
+### MNIST 紧凑模型选项
+
+标准模型使用三层复数卷积 `16/32/64` 和两层全连接 `256/128`。完整MNIST在CPU-Offload
+逐批训练路径下耗时较长，因此提供显式的 `--model-profile mnist_small`：两层复数卷积
+`8/16` 和一层全连接 `64`。四种方法仍共享完全相同的模型，权重、梯度、优化器和通信量化
+定义不变；该选项只允许用于MNIST。正式实验一旦选择某个模型配置，四种方法和三个种子都
+必须保持一致，不能把 `standard` 与 `mnist_small` 的结果合并。
+
+正式运行前建议分别测试 batch 128 和 256 的单轮耗时及 5 轮收敛情况。单轮计时应至少
+运行 2 轮并以第 2 轮为主要参考，因为第 1 轮包含 TensorFlow 图编译和缓存预热：
+
+```bash
+python -u run_experiment1.py --dataset mnist --method all \
+  --rounds 2 --batch-size 128 --model-profile mnist_small \
+  --seed 42 --output-root results/mnist_timing_small_b128
+
+python -u run_experiment1.py --dataset mnist --method all \
+  --rounds 2 --batch-size 256 --model-profile mnist_small \
+  --seed 42 --output-root results/mnist_timing_small_b256
+
+python -u run_experiment1.py --dataset mnist --method all \
+  --rounds 5 --batch-size 128 --model-profile mnist_small \
+  --seed 42 --output-root results/mnist_pilot_small_b128
+
+python -u run_experiment1.py --dataset mnist --method all \
+  --rounds 5 --batch-size 256 --model-profile mnist_small \
+  --seed 42 --output-root results/mnist_pilot_small_b256
+```
+
+优先检查 `mnist_small + batch 128`，它只改变模型容量且比 batch 256 保留更多本地更新步数。
+如果仍然过慢，再比较 batch 256 的 5 轮精度趋势。选择完成后，MNIST 的全部四种方法、
+三个种子和所有正式轮次必须使用同一组 `model-profile` 与 `batch-size`。
+
 ## 云端先做冒烟测试
 
 先用少量样本验证显存、输入形状和四种优化路径：
 
 ```bash
 python run_experiment1.py --dataset mnist --method all \
-  --rounds 1 --local-epochs 1 \
+  --rounds 1 --local-epochs 1 --batch-size 128 \
+  --model-profile mnist_small \
   --max-train-samples 3200 --max-test-samples 1000
 ```
 
@@ -67,10 +102,15 @@ for seed in 42 123 2024; do
     --output-root results/experiment1_final
 done
 
+# 以下MNIST命令假定5轮pilot最终选择了紧凑模型和batch 128；如果选择256，
+# 只修改MNIST_BATCH一次，不能把两种batch的结果放进同一正式目录。
+MNIST_BATCH=128
+MNIST_OUTPUT=results/experiment1_mnist_small_final
 for seed in 42 123 2024; do
   PYTHONHASHSEED=$seed python -u run_experiment1.py \
     --dataset mnist --method all --seed "$seed" \
-    --output-root results/experiment1_final
+    --batch-size "$MNIST_BATCH" --model-profile mnist_small \
+    --output-root "$MNIST_OUTPUT"
 done
 
 for seed in 42 123 2024; do
@@ -98,7 +138,7 @@ results/experiment1_final/<dataset>/<method>/seed_<seed>_<timestamp>/
 
 ```bash
 python plot_experiment1.py --dataset mnist \
-  --results-root results/experiment1_final --seeds 42 123 2024
+  --results-root results/experiment1_mnist_small_final --seeds 42 123 2024
 python plot_experiment1.py --dataset ravdess \
   --results-root results/experiment1_final --seeds 42 123 2024
 python plot_experiment1.py --dataset dronerf \

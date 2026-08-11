@@ -12,6 +12,11 @@ METHOD_NAMES: Tuple[str, ...] = (
     "cqfl",
 )
 
+MODEL_PROFILES: Tuple[str, ...] = (
+    "standard",
+    "mnist_small",
+)
+
 
 @dataclass(frozen=True)
 class DatasetConfig:
@@ -61,12 +66,17 @@ class ExperimentConfig:
     local_epochs: int = 0
     max_train_samples: int = 0
     max_test_samples: int = 0
+    model_profile: str = "standard"
 
     def resolved(self) -> "ExperimentConfig":
         if self.dataset not in DATASET_CONFIGS:
             raise ValueError(f"unknown dataset: {self.dataset}")
         if self.method not in METHOD_NAMES:
             raise ValueError(f"unknown method: {self.method}")
+        if self.model_profile not in MODEL_PROFILES:
+            raise ValueError(f"unknown model profile: {self.model_profile}")
+        if self.model_profile == "mnist_small" and self.dataset != "mnist":
+            raise ValueError("mnist_small model profile is only valid for MNIST")
         ds = DATASET_CONFIGS[self.dataset]
         self.clients = self.clients or ds.clients
         self.rounds = self.rounds or ds.rounds
