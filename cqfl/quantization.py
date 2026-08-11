@@ -46,12 +46,12 @@ def phase_quantize_weight_np(values: np.ndarray) -> Tuple[np.ndarray, np.ndarray
     return phase_dequantize_np(codes, 1.0), codes
 
 
-def phase_quantize_gradient_np(values: np.ndarray) -> Tuple[np.ndarray, np.float16, np.ndarray]:
-    """Draft definition: 2-bit direction plus one FP16 global magnitude."""
+def phase_quantize_gradient_np(values: np.ndarray) -> Tuple[np.ndarray, np.float32, np.ndarray]:
+    """2-bit direction plus one FP32 tensor magnitude."""
     values = np.asarray(values, dtype=np.float32)
     codes = phase_codes_np(values)
     magnitudes = np.linalg.norm(values, axis=-1)
-    scale = np.float16(np.mean(magnitudes, dtype=np.float64) if magnitudes.size else 0.0)
+    scale = np.float32(np.mean(magnitudes, dtype=np.float64) if magnitudes.size else 0.0)
     return phase_dequantize_np(codes, float(scale)), scale, codes
 
 
@@ -83,6 +83,6 @@ def phase_quantize_unit_tf(values):
 def quantize_complex_delta_np(values: np.ndarray) -> Tuple[np.ndarray, int]:
     """Quantize an uploaded complex update and return reconstructed values/bytes."""
     reconstructed, _scale, codes = phase_quantize_gradient_np(values)
-    # Four codes per byte plus one FP16 scale.
-    payload_bytes = (codes.size + 3) // 4 + 2
+    # Four codes per byte plus one FP32 scale.
+    payload_bytes = (codes.size + 3) // 4 + 4
     return reconstructed, payload_bytes

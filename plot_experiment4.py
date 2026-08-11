@@ -41,7 +41,7 @@ STYLES = {
 }
 
 
-def _read_cumulative_uplink(metrics_path: Path) -> np.ndarray:
+def _read_cumulative_uplink(metrics_path: Path, method: str) -> np.ndarray:
     with metrics_path.open("r", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     if not rows:
@@ -51,6 +51,52 @@ def _read_cumulative_uplink(metrics_path: Path) -> np.ndarray:
             f"{metrics_path} has no uplink_bytes column; this run cannot be "
             "used for experiment 4"
         )
+
+    # CQ-FL results produced before the full-trainable 2-bit codec only
+    # compressed tensors whose final dimension happened to be two.  Reject
+    # those legacy files instead of silently drawing an invalid near-FP32
+    # communication curve.  The split fields also make the byte accounting
+    # auditable: packed complex + packed real + FP32 non-trainable state must
+    # equal the reported total in every round.
+    if method == "cqfl":
+        split_fields = {
+            "uplink_trainable_bytes",
+            "uplink_complex_2bit_bytes",
+            "uplink_real_2bit_bytes",
+            "uplink_non_trainable_bytes",
+        }
+        missing = split_fields.difference(rows[0])
+        if missing:
+            raise ValueError(
+                f"{metrics_path} is a legacy CQ-FL run without full-trainable "
+                f"2-bit accounting (missing {sorted(missing)}); rerun CQ-FL"
+            )
+        for row_index, row in enumerate(rows, start=1):
+            try:
+                total = int(row["uplink_bytes"])
+                trainable = int(row["uplink_trainable_bytes"])
+                complex_bytes = int(row["uplink_complex_2bit_bytes"])
+                real_bytes = int(row["uplink_real_2bit_bytes"])
+                non_trainable = int(row["uplink_non_trainable_bytes"])
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"invalid CQ-FL uplink split in {metrics_path}, row {row_index}"
+                ) from error
+            if trainable != complex_bytes + real_bytes:
+                raise ValueError(
+                    f"CQ-FL trainable byte split does not add up in "
+                    f"{metrics_path}, row {row_index}"
+                )
+            if total != trainable + non_trainable:
+                raise ValueError(
+                    f"CQ-FL total uplink byte split does not add up in "
+                    f"{metrics_path}, row {row_index}"
+                )
+            if complex_bytes <= 0 or real_bytes <= 0:
+                raise ValueError(
+                    f"CQ-FL did not encode both complex and real trainable "
+                    f"updates in {metrics_path}, row {row_index}"
+                )
 
     try:
         per_round = np.asarray(
@@ -70,7 +116,9 @@ def _collect_communication(
     seeds: Iterable[int],
 ) -> Tuple[np.ndarray, np.ndarray, List[dict], List[Path]]:
     accuracy, configs, paths = collect(root, dataset, method, seeds)
-    cumulative = np.stack([_read_cumulative_uplink(path) for path in paths])
+    cumulative = np.stack(
+        [_read_cumulative_uplink(path, method) for path in paths]
+    )
     if cumulative.shape != accuracy.shape:
         raise ValueError(
             f"accuracy/uplink shape mismatch for {dataset}/{method}: "

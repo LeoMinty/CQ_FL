@@ -2,15 +2,15 @@
 
 ## 概述
 
-本项目探索**复数域神经网络的极端低比特量化**及其在**联邦学习**场景下的应用。核心思想是将网络权重和梯度同时量化到复平面上的 4 个方向 `{1, i, -1, -i}`（即 2-bit 相位量化），从而大幅降低 GPU 显存占用和通信带宽需求。
+本项目探索**复数域神经网络的极端低比特量化**及其在**联邦学习**场景下的应用。核心思想是把复数卷积的权重和局部梯度映射到复平面上的4个方向 `{1, i, -1, -i}`，并把正式CQ-FL的全部可训练客户端更新编码为2-bit逻辑消息，以降低理论通信负载。当前TensorFlow实现仍保留FP32计算影子，不能把逻辑2-bit直接解释为实测GPU显存。
 
 主要工作包括：
 
 1. **复数网络基础组件**：实现了复数卷积 (`ComplexConv2D`)、复数批归一化 (`ComplexBatchNormalization`)、复数线性层 (`ComplexLinear`)、复数最大池化 (`ComplexMaxPool2D`) 等算子
-2. **2-bit 相位量化**：前向时通过 `phase_quant` 将 fp32 权重按相位角映射到 `{1, i, -1, -i}`，反向时梯度同样量化（LPT-FL 风格）
+2. **2-bit 相位量化**：复数卷积前向通过 `phase_quant` 将fp32权重映射到 `{1, i, -1, -i}`，CQ-FL反向对该复数卷积路径的梯度作同类量化
 3. **无乘法卷积**：量化后的复数矩阵乘法 `simplified_complex_matmul` 利用掩码 + matmul 替代逐元素乘法，硬件友好
-4. **CPU-Offload 训练**：fp32 主权重 + Adam 状态常驻 CPU，GPU 仅保留量化后的 2-bit 权重和临时激活值
-5. **联邦学习 (FedAvg)**：多客户端本地训练 → 权重聚合，支持梯度量化通信
+4. **CPU-Offload 训练**：fp32主权重与Adam状态在CPU更新；GPU保留FP32 Keras计算影子，并在算子内部临时生成量化表示和激活值
+5. **联邦学习 (FedAvg)**：多客户端本地训练 → 模型增量聚合；正式 CQ-FL 入口将全部可训练增量真正打包为 2-bit 上行消息
 
 ---
 
@@ -25,6 +25,7 @@ CQ-FL/
 ├── Bit2Conv.py                   # 复数池化 (ComplexMaxPool2D) + 基础复数卷积参考实现
 ├── Bit2Linear.py                 # 复数线性层 (ComplexLinear) + RealToComplex/TakeReal
 ├── BitMyConv.py                  # 复数卷积模型（早期版本，含 STE 量化 + 缩放因子）
+├── Bit2Communication.py         # 正式实验新增：全可训练参数2-bit打包/解包
 │
 ├── FLConfig.py                   # ★ 联邦学习主入口 (MNIST) — 含 3 种模式
 ├── FLConfig_ravdess.py           # ★ 联邦学习主入口 (RAVDESS 语音情感识别)
@@ -52,7 +53,12 @@ run_experiment1.py               # 三数据集、四方案统一入口
 cqfl/models.py                   # 组装原BitFL层，不重复实现ComplexConv
 cqfl/federated.py                # CPU主权重、客户端训练与FedAvg
 cqfl/ca4bit.py                   # CPMQ一阶矩 + 逐分量4-bit二阶矩
-cqfl/quantization.py             # 2-bit通信打包/解包
+cqfl/quantization.py             # 原相位量化的TensorFlow/NumPy辅助函数
+Bit2Communication.py             # 联邦边界的真实2-bit消息编解码器
+test_bit2_communication.py       # 位打包、相位边界、聚合及字节回归测试
+test_federated_wiring.py         # TensorFlow模型掩码与联邦接线测试
+validate_bit2_run.py             # 单次CQ-FL结果协议与通信分项核验
+BIT2_COMMUNICATION.md            # 旧代码审计、正式协议和结果兼容性
 cqfl/data.py                     # 三数据集与客户端划分
 prepare_ravdess_stft.py          # 正式RAVDESS复数STFT
 prepare_dronerf.py               # DroneRF复数FFT及物理段编号
@@ -60,6 +66,11 @@ prepare_dronerf.py               # DroneRF复数FFT及物理段编号
 
 其中正式实验仍直接调用 `BitMyConv_noMul.py`、`Bit2Conv.py` 和
 `Bit2Linear.py` 的原有核心模块；`cqfl/` 是实验组织与4-bit优化器扩展层。
+旧 `FLConfig*.py` 联邦demo并未实现2-bit通信：其实际训练路径只在本地前向/反向中量化
+复数卷积，并上传FP32主权重。旧目录中的 `ComplexLinear` 也有本地前向量化实现，但两个
+联邦demo没有使用它，它同样不是通信编码器。
+因此 `Bit2Communication.py` 是为正式 CQ-FL 实验补齐的通信边界，不是对旧代码中既有通信
+模块的重复实现。
 
 ---
 
@@ -78,7 +89,7 @@ prepare_dronerf.py               # DroneRF复数FFT及物理段编号
 ```
 
 - **前向**：权重 phase_quant 为 `{1, i, -1, -i}`，卷积/矩阵乘可通过位操作或无乘法实现
-- **反向**：`custom_gradient` 将梯度也量化（STE 直通估计的扩展），梯度变成 2-bit 后再回传 CPU
+- **反向**：CQ-FL的 `custom_gradient` 对复数卷积kernel梯度执行同类相位量化；实值Dense/BN局部梯度仍是FP32
 
 ### 2. 无乘法复数矩阵乘
 
@@ -97,20 +108,27 @@ B = -i:  C =  b - ai    (交换+负)
 
 ```
 ┌──────────── CPU ────────────┐     ┌──────────── GPU ────────────┐
-│  fp32 W_master               │────→│  2-bit 量化权重（无乘法卷积） │
-│  Adam 优化器状态             │     │  激活值（临时）              │
-│  ← 2-bit 梯度（反向）        │←────│  custom_gradient 量化梯度    │
+│  fp32 W_master               │────→│  FP32 Keras计算影子           │
+│  Adam/CA4优化器状态          │     │  临时2-bit卷积表示与激活值   │
+│  ← 局部梯度                  │←────│  复数卷积梯度相位量化         │
 │  Adam update                 │     │                              │
 └──────────────────────────────┘     └──────────────────────────────┘
 ```
 
-每步训练：CPU→GPU(权重同步) → GPU前向/反向 → GPU→CPU(量化梯度) → CPU Adam更新
+每步训练：CPU→GPU(权重同步) → GPU前向/反向 → GPU→CPU(复数卷积梯度已量化、实值梯度仍FP32) → CPU优化器更新
 
 ### 4. 联邦学习 (FedAvg)
 
-- 每轮：各客户端从全局 `W_master` 复制权重 → 本地训练 2 epoch → 上传 `W_master`
+旧 `FLConfig.py` / `FLConfig_ravdess.py` demo 的行为是：
+
+- 每轮：各客户端从全局 `W_master` 复制权重 → 本地训练 2 epoch → 上传FP32 `W_master`
 - 聚合：对所有客户端和 BN 统计量取均值（CPU 侧完成）
-- 通信量：与全精度模型相同（暂未做模型压缩），但训练时的梯度已是 2-bit
+- 通信量：与全精度模型相同；旧代码没有2-bit编码、位打包或解码过程
+
+正式 `run_experiment1.py` 中的 CQ-FL 则上传本地训练后的模型增量：复数可训练张量采用
+`{+1,+i,-1,-i}` 四相位码，实数 Dense/BN 可训练张量采用同一2-bit协议的实轴子集；每个
+张量附带一个FP32逐张量幅值，四个码真实打包进一个 `uint8`。服务端先解码，再执行按客户端
+样本数加权的 FedAvg。BN moving mean/variance 等非可训练状态仍按FP32上传并计入通信量。
 
 ---
 
@@ -216,7 +234,7 @@ CPU-Offload 训练器：
 - `train_step(x_batch, y_batch)`：单步训练（CPU→GPU→前向→反向→CPU更新）
 - `evaluate(x_test, y_test)`：分批评估
 - `_sync_cpu_to_gpu()`：CPU 权重 → GPU 模型变量
-- `_phase_quant(tensor)`：梯度量化（仅用于 Dense/BN 层补齐）
+- `_phase_quant(tensor)`：只量化末维为2的复数张量；实值Dense/BN张量原样返回
 
 ### `simplified_complex_matmul` (BitMyConv_noMul.py)
 

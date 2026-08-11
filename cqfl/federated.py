@@ -16,6 +16,11 @@ import numpy as np
 import tensorflow as tf
 
 from BitMyConv_noMul import ComplexConv2D
+from Bit2Communication import (
+    PROTOCOL_VERSION,
+    quantize_complex_update_np,
+    quantize_real_update_np,
+)
 
 from .ca4bit import CA4BitAdam
 from .config import ExperimentConfig
@@ -24,7 +29,6 @@ from .models import build_model
 from .quantization import (
     phase_quantize_unit_tf,
     phase_quantize_weight_np,
-    quantize_complex_delta_np,
 )
 
 
@@ -35,13 +39,30 @@ def set_determinism(seed: int) -> None:
     tf.random.set_seed(seed)
 
 
-def _is_complex_array(array: np.ndarray) -> bool:
-    return array.ndim >= 1 and array.shape[-1] == 2
-
-
-def _is_complex_variable(variable) -> bool:
-    shape = tuple(int(dimension) for dimension in variable.shape)
-    return len(shape) >= 1 and shape[-1] == 2
+def _bitfl_variable_masks(model):
+    """Return explicit kernel/complex masks in model trainable-variable order."""
+    bitfl_layers = [
+        layer for layer in model.layers if isinstance(layer, ComplexConv2D)
+    ]
+    kernel_ids = {id(layer.kernel_fp) for layer in bitfl_layers}
+    complex_ids = set(kernel_ids)
+    complex_ids.update(
+        id(layer.bias)
+        for layer in bitfl_layers
+        if getattr(layer, "bias", None) is not None
+    )
+    kernel_mask = [id(variable) in kernel_ids for variable in model.trainable_variables]
+    complex_mask = [id(variable) in complex_ids for variable in model.trainable_variables]
+    if sum(kernel_mask) != len(kernel_ids) or sum(complex_mask) != len(complex_ids):
+        raise RuntimeError("failed to identify all BitFL variables in model state")
+    for variable, is_complex in zip(model.trainable_variables, complex_mask):
+        if is_complex and (
+            len(variable.shape) < 1 or int(variable.shape[-1]) != 2
+        ):
+            raise RuntimeError(
+                f"BitFL complex variable lacks a final real/imag axis: {variable.name}"
+            )
+    return kernel_mask, complex_mask
 
 
 def _quantized_broadcast(
@@ -65,16 +86,28 @@ def _quantized_broadcast(
     return output, int(payload)
 
 
-def _quantized_upload(delta: np.ndarray, method: str):
-    """Encode a FedAvg client update; CQ-FL compresses complex tensors to 2-bit."""
+def _quantized_upload(delta: np.ndarray, method: str, is_complex: bool):
+    """Encode the message that is actually reconstructed by the server.
+
+    The legacy BitFL demos upload FP32 master weights and contain no low-bit
+    federated codec.  CQ-FL supplies that missing boundary here: every
+    trainable client delta is physically packed to two bits per scalar/complex
+    element and decoded before weighted FedAvg aggregation.  Complex tensors
+    use the original four-axis phase alphabet; real tensors use its real-axis
+    subset.  Non-trainable state is handled separately in FP32.
+    """
     delta = np.asarray(delta, dtype=np.float32)
-    if method == "cqfl" and _is_complex_array(delta):
-        return quantize_complex_delta_np(delta)
+    if method == "cqfl":
+        if is_complex:
+            reconstructed, payload = quantize_complex_update_np(delta)
+            return reconstructed, payload, "complex_2bit"
+        reconstructed, payload = quantize_real_update_np(delta)
+        return reconstructed, payload, "real_2bit"
     if method == "signsgd":
         scale = float(np.mean(np.abs(delta), dtype=np.float64)) if delta.size else 0.0
         reconstructed = np.sign(delta).astype(np.float32) * scale
-        return reconstructed, (delta.size + 7) // 8 + 4
-    return delta, int(delta.nbytes)
+        return reconstructed, (delta.size + 7) // 8 + 4, "sign_1bit"
+    return delta, int(delta.nbytes), "fp32"
 
 
 class BitFLOffloadTrainer:
@@ -90,6 +123,9 @@ class BitFLOffloadTrainer:
         self.model = model
         self.method = method
         self.learning_rate = float(config.learning_rate)
+        _kernel_mask, self.complex_trainable_mask = _bitfl_variable_masks(model)
+        if len(self.complex_trainable_mask) != len(model.trainable_variables):
+            raise RuntimeError("complex gradient mask does not match trainable variables")
         self.loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         with tf.device("/CPU:0"):
             self.master_weights = [
@@ -143,14 +179,16 @@ class BitFLOffloadTrainer:
 
     def _prepare_gradients(self, gradients):
         prepared = []
-        for gradient, variable in zip(gradients, self.model.trainable_variables):
+        if len(gradients) != len(self.complex_trainable_mask):
+            raise ValueError("gradient list does not match the BitFL model")
+        for gradient, is_complex in zip(gradients, self.complex_trainable_mask):
             if gradient is None:
                 prepared.append(None)
                 continue
             # The original layer already quantizes Conv kernels through its
             # custom gradient.  Applying the same unit map here also covers
             # complex biases while leaving real Dense/BN tensors untouched.
-            if self.method == "cqfl" and _is_complex_variable(variable):
+            if self.method == "cqfl" and is_complex:
                 gradient = phase_quantize_unit_tf(gradient)
             prepared.append(gradient)
         return prepared
@@ -271,14 +309,21 @@ def run(config: ExperimentConfig) -> Path:
     global_non_trainable = [
         np.asarray(v.numpy(), np.float32) for v in global_model.non_trainable_variables
     ]
-    bitfl_kernel_ids = {
-        id(layer.kernel_fp)
-        for layer in global_model.layers
-        if isinstance(layer, ComplexConv2D)
-    }
-    bitfl_kernel_mask = [
-        id(variable) in bitfl_kernel_ids for variable in global_model.trainable_variables
-    ]
+    # Explicit masks are safer than classifying arbitrary tensors by a final
+    # dimension of length two: a real Dense layer may legitimately have two
+    # outputs.  ComplexConv kernels and biases are the only complex variables
+    # in the shared architecture; all other trainable tensors use the real
+    # 2-bit message codec for CQ-FL uploads.
+    bitfl_kernel_mask, bitfl_complex_mask = _bitfl_variable_masks(global_model)
+    if len(bitfl_complex_mask) != len(global_trainable):
+        raise RuntimeError("complex upload mask does not match trainable state")
+    if config.method == "cqfl" and (
+        not any(bitfl_complex_mask) or all(bitfl_complex_mask)
+    ):
+        raise RuntimeError(
+            "CQ-FL requires both complex and real trainable tensors for its "
+            "two-codec uplink protocol"
+        )
 
     clients: List[BitFLOffloadTrainer] = []
     for client_id in range(config.clients):
@@ -290,7 +335,17 @@ def run(config: ExperimentConfig) -> Path:
             config.model_profile,
         )
         _ = model(tf.zeros((1, *bundle.input_shape), tf.float32), training=False)
-        clients.append(BitFLOffloadTrainer(model, config.method, config))
+        trainer = BitFLOffloadTrainer(model, config.method, config)
+        client_shapes = [
+            tuple(int(dimension) for dimension in variable.shape)
+            for variable in model.trainable_variables
+        ]
+        global_shapes = [tuple(value.shape) for value in global_trainable]
+        if client_shapes != global_shapes:
+            raise RuntimeError("client/global trainable variable layouts differ")
+        if trainer.complex_trainable_mask != bitfl_complex_mask:
+            raise RuntimeError("client/global complex variable masks differ")
+        clients.append(trainer)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = Path(config.output_root) / config.dataset / config.method / f"seed_{config.seed}_{timestamp}"
@@ -303,7 +358,12 @@ def run(config: ExperimentConfig) -> Path:
         "train_loss",
         "test_loss",
         "test_accuracy",
+        "uplink_protocol",
         "uplink_bytes",
+        "uplink_trainable_bytes",
+        "uplink_complex_2bit_bytes",
+        "uplink_real_2bit_bytes",
+        "uplink_non_trainable_bytes",
         "downlink_bytes",
         "optimizer_state_bytes",
         "round_seconds",
@@ -324,6 +384,10 @@ def run(config: ExperimentConfig) -> Path:
             trainable_deltas, non_trainable_deltas = [], []
             sample_counts, losses = [], []
             uplink_bytes = 0
+            uplink_trainable_bytes = 0
+            uplink_complex_2bit_bytes = 0
+            uplink_real_2bit_bytes = 0
+            uplink_non_trainable_bytes = 0
             for client_id, (trainer, (x_client, y_client)) in enumerate(zip(clients, bundle.clients)):
                 trainer.set_state(broadcast_trainable, broadcast_non_trainable)
                 losses.append(
@@ -337,15 +401,29 @@ def run(config: ExperimentConfig) -> Path:
                 )
                 local_trainable, local_non_trainable = trainer.get_state()
                 encoded_trainable = []
-                for local, base in zip(local_trainable, broadcast_trainable):
-                    reconstructed, payload = _quantized_upload(local - base, config.method)
+                for local, base, is_complex in zip(
+                    local_trainable,
+                    broadcast_trainable,
+                    bitfl_complex_mask,
+                ):
+                    reconstructed, payload, encoding = _quantized_upload(
+                        local - base,
+                        config.method,
+                        is_complex,
+                    )
                     encoded_trainable.append(reconstructed)
                     uplink_bytes += payload
+                    uplink_trainable_bytes += payload
+                    if encoding == "complex_2bit":
+                        uplink_complex_2bit_bytes += payload
+                    elif encoding == "real_2bit":
+                        uplink_real_2bit_bytes += payload
                 encoded_non_trainable = []
                 for local, base in zip(local_non_trainable, broadcast_non_trainable):
                     delta = local - base
                     encoded_non_trainable.append(delta)
                     uplink_bytes += delta.nbytes
+                    uplink_non_trainable_bytes += delta.nbytes
                 trainable_deltas.append(encoded_trainable)
                 non_trainable_deltas.append(encoded_non_trainable)
                 sample_counts.append(len(y_client))
@@ -371,7 +449,14 @@ def run(config: ExperimentConfig) -> Path:
                 "train_loss": float(np.mean(losses)),
                 "test_loss": test_loss,
                 "test_accuracy": test_accuracy,
+                "uplink_protocol": (
+                    PROTOCOL_VERSION if config.method == "cqfl" else config.method
+                ),
                 "uplink_bytes": int(uplink_bytes),
+                "uplink_trainable_bytes": int(uplink_trainable_bytes),
+                "uplink_complex_2bit_bytes": int(uplink_complex_2bit_bytes),
+                "uplink_real_2bit_bytes": int(uplink_real_2bit_bytes),
+                "uplink_non_trainable_bytes": int(uplink_non_trainable_bytes),
                 "downlink_bytes": int(
                     (trainable_downlink + non_trainable_downlink) * config.clients
                 ),
@@ -395,6 +480,20 @@ def run(config: ExperimentConfig) -> Path:
             "core": "BitMyConv_noMul.ComplexConv2D",
             "weight_quantizer": "original unit {+1,+i,-1,-i}",
             "federated_update": "FedAvg client delta",
+            "uplink_protocol_version": (
+                PROTOCOL_VERSION if config.method == "cqfl" else config.method
+            ),
+            "complex_uplink": (
+                "packed 2-bit phase code + one FP32 tensor scale"
+                if config.method == "cqfl"
+                else "not used by this method"
+            ),
+            "real_uplink": (
+                "packed 2-bit real-axis code + one FP32 tensor scale"
+                if config.method == "cqfl"
+                else "not used by this method"
+            ),
+            "non_trainable_uplink": "FP32",
             "optimizer": "CA4BitAdam" if config.method == "cqfl" else config.method,
         },
         "best_test_accuracy": max(row["test_accuracy"] for row in history),
@@ -404,7 +503,9 @@ def run(config: ExperimentConfig) -> Path:
             "All four methods use one complex architecture and parameter layout.",
             "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
             "CA-4bit preserves component-wise Adam second-moment equations.",
-            "CQ-FL uploads a phase-quantized FedAvg client update, not a per-batch raw gradient.",
+            "The legacy demos upload FP32 masters; Bit2Communication supplies the missing packed federated codec.",
+            "CQ-FL uploads every trainable FedAvg client delta at 2-bit; complex and real tensors use separate decoders.",
+            "BatchNorm moving statistics and other non-trainable client state remain FP32.",
             "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32.",
         ],
     }

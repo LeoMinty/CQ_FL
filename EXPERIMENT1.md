@@ -19,7 +19,9 @@
 四种方法现在共用同一套复数网络和参数布局。正式入口直接复用原项目的
 `BitMyConv_noMul.ComplexConv2D`、`simplified_complex_matmul`、
 `Bit2Conv.ComplexMaxPool2D` 以及 `Bit2Linear.RealToComplex/TakeReal`；新包只负责
-数据、实验组织、CA-4bit 状态和结果记录。
+数据、实验组织、CA-4bit 状态和结果记录。原项目的联邦 demo 实际上传FP32主权重，并没有
+2-bit通信编码器；正式入口新增的 `Bit2Communication.py` 专门补齐真实的2-bit打包、解码
+和服务端聚合边界。
 
 ## 数据准备
 
@@ -155,20 +157,54 @@ results/experiment1_final/ravdess_accuracy_summary.csv
 如果绘图工具报告某个种子重复，应把旧的重复运行目录移出正式结果根目录，而不是让脚本
 自动选择一次运行。
 
+## 实验4：累计上行通信量与精度
+
+实验1的 `metrics.csv` 会逐轮保存 `test_accuracy` 和 `uplink_bytes`，因此同一版算法的实验4
+不需要另外训练。注意：在加入 `Bit2Communication.py` 之前产生的 CQ-FL 结果只压缩了复数
+张量，不能用于“全可训练参数2-bit上行”的实验4；绘图器会识别并拒绝这种旧文件。旧的
+FedAvg、SignSGD 和 `w2_fp32_adam` 结果未改变，但 CQ-FL 必须用新代码重新运行。
+以下命令严格读取四种方法和三个正式种子，先对每个种子的上行字节逐轮累加，再绘制平均
+精度和标准差阴影：
+
+```bash
+python plot_experiment4.py --dataset ravdess \
+  --results-root results/experiment1_final \
+  --seeds 42 123 2024 --unit mib --xscale linear
+```
+
+默认生成：
+
+```text
+results/experiment1_final/ravdess_accuracy_vs_cumulative_uplink.pdf
+results/experiment1_final/ravdess_communication_summary.csv
+```
+
+若线性横轴下低通信方案过于拥挤，可改为 `--xscale log`。若论文选定了所有方法均可达到的
+共同目标精度，例如 `0.55`，可增加 `--target-accuracy 0.55`；汇总CSV会记录各方法达到
+该精度所需的平均上行字节数和成功达到目标的种子数。这里的 `uplink_bytes` 是所有客户端
+理想位打包负载之和，不包含网络协议头，也不等于通信耗时。新 CQ-FL 文件还记录
+`uplink_complex_2bit_bytes`、`uplink_real_2bit_bytes` 与 `uplink_non_trainable_bytes`；
+绘图前会检查这些分项之和是否等于总字节数。
+
 ## 实现边界
 
-- 2-bit 权重和梯度消息均按位打包计数；TensorFlow 计算图中的影子变量仍是 FP32，不能把
-  逻辑位宽直接写成实测 GPU 显存。
+- 新版CQ-FL**上行客户端更新**会真实执行2-bit pack/unpack；下行目前只对ComplexConv kernel
+  执行量化并按逻辑码数计数，Dense/BN下行仍是FP32，尚不是“全模型双向2-bit网络包”。
+  TensorFlow计算图中的影子变量也仍是FP32，不能把逻辑位宽直接写成实测GPU显存。
 - 原 BitFL 的 2-bit 单位四相位与无乘法卷积保持不变。`w2_fp32_adam` 使用标准STE，
   `cqfl` 才启用反向相位量化；两者的前向完全相同。
-- 2-bit 权重量化作用于 ComplexConv kernel；复数偏置以及取实部后的 Dense/BN 权重保持
-  FP32。CQ-FL 对所有复数梯度/客户端更新应用相位量化，实值分类头保持 FP32。
+- 2-bit **前向权重**量化仍只作用于 ComplexConv kernel；复数偏置以及取实部后的 Dense/BN
+  计算影子保持FP32。与前向计算不同，CQ-FL 的**联邦上行消息**覆盖全部可训练参数：复数
+  kernel/bias 使用四相位2-bit码，实数 Dense/BN 更新使用2-bit实轴码。两者各张量均携带一个
+  FP32通信幅值；通信scale是每张量一个，而CA-4bit优化器的FP32块scale是每64个状态值一个，
+  二者虽然数据类型相同，但作用和生命周期不同。
 - CA-4bit 的一阶复数动量持久化为 2-bit 相位和 4-bit 幅度。二阶动量保持标准Adam的
   原始形状，实部和虚部各自维护独立状态，再分别使用排除零点的4-bit线性映射；每64个值
   保存一个FP32 scale。FP32 scale 是块量化元数据，用于避免Adam二阶矩在FP16范围内下溢；
   块内状态编码仍为4-bit。CA-4bit只改变状态存储，不把Adam改成共享分母的另一种算法。
 - 客户端继续使用原BitFL的CPU FP32主权重/计算影子路径。CA-4bit取代的是持久化Adam状态，
   不是原有2-bit卷积模块。
-- 联邦主循环以 FedAvg 模型增量实现本地两 epoch。CQ-FL 上传复数模型增量的 2-bit 相位编码，
-  它是草稿中“上传梯度”的可执行 FedAvg 对应物；论文应称为“量化客户端更新”，除非后续把
-  服务端改成逐梯度 FedOpt。
+- 联邦主循环以 FedAvg 模型增量实现本地两 epoch。CQ-FL 上传全部可训练模型增量的2-bit
+  编码，服务端实际聚合的是解码值，而不是只在统计图中按2-bit估算字节。它是草稿中“上传
+  梯度”的可执行 FedAvg 对应物；论文应称为“量化客户端更新”，除非后续把服务端改成逐梯度
+  FedOpt。BN moving mean/variance 等非可训练状态仍按FP32上传并如实计入。

@@ -24,9 +24,11 @@ def build_model(
     """Build one common architecture for all experiment-one methods.
 
     ``w2_fp32_adam`` and ``cqfl`` share the exact same 2-bit forward operator.
-    Their only training-core differences are the backward quantization switch
-    and the optimizer.  FP32 and SignSGD use the same complex architecture with
-    the weight quantizer disabled, keeping parameter layouts comparable.
+    Their local training-core differences are the backward quantization switch
+    and the optimizer; the federated runner additionally gives CQ-FL the packed
+    2-bit client-update boundary.  FP32 and SignSGD use the same complex
+    architecture with the weight quantizer disabled, keeping parameter layouts
+    comparable.
     """
     if method not in {"fedavg_fp32", "signsgd", "w2_fp32_adam", "cqfl"}:
         raise ValueError(f"unknown method: {method}")

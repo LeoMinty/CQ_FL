@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+from Bit2Communication import PROTOCOL_VERSION
 from cqfl.config import METHOD_NAMES
 
 
@@ -52,11 +53,36 @@ def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
     if not rows:
         raise ValueError(f"empty metrics file: {metrics_path}")
     required_columns = {"round", "test_accuracy"}
+    if config.get("method") == "cqfl":
+        # Full-trainable 2-bit CQ-FL changes the decoded global update, not
+        # merely its communication accounting.  Reject older CQ-FL files so
+        # an accuracy plot cannot mix the pre-codec algorithm with this one.
+        required_columns.update(
+            {
+                "uplink_trainable_bytes",
+                "uplink_complex_2bit_bytes",
+                "uplink_real_2bit_bytes",
+                "uplink_non_trainable_bytes",
+                "uplink_protocol",
+            }
+        )
     missing_columns = required_columns.difference(rows[0])
     if missing_columns:
+        if config.get("method") == "cqfl" and "uplink_real_2bit_bytes" in missing_columns:
+            raise ValueError(
+                f"{metrics_path} is a legacy CQ-FL run from before the "
+                f"full-trainable 2-bit codec; rerun CQ-FL"
+            )
         raise ValueError(
             f"{metrics_path} is missing columns: {sorted(missing_columns)}"
         )
+    if config.get("method") == "cqfl":
+        protocols = {row["uplink_protocol"] for row in rows}
+        if protocols != {PROTOCOL_VERSION}:
+            raise ValueError(
+                f"unsupported CQ-FL uplink protocol in {metrics_path}: "
+                f"{sorted(protocols)!r}; expected {PROTOCOL_VERSION!r}"
+            )
 
     recorded_rounds = [int(row["round"]) for row in rows]
     expected_count = int(config["rounds"])
