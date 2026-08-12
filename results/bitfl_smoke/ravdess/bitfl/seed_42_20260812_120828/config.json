@@ -1,0 +1,18 @@
+{
+  "dataset": "ravdess",
+  "method": "bitfl",
+  "data_path": "ravdess_processed/ravdess_c3_stft.npz",
+  "output_root": "results/bitfl_smoke",
+  "batch_size": 32,
+  "learning_rate": 0.0003,
+  "block_size": 64,
+  "seed": 42,
+  "clients": 2,
+  "rounds": 1,
+  "local_epochs": 1,
+  "max_train_samples": 128,
+  "max_test_samples": 128,
+  "model_profile": "standard",
+  "bitfl_normalization_bound": 1.0,
+  "bitfl_topk_fraction": 0.5
+}

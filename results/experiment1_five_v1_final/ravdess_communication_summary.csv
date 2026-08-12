@@ -1,0 +1,6 @@
+dataset,method,seeds,rounds,final_cumulative_uplink_bytes_mean,final_cumulative_uplink_bytes_std,uplink_compression_vs_fedavg,final_accuracy_mean,final_accuracy_std,target_accuracy,seeds_reaching_target,mean_uplink_bytes_to_target,std_uplink_bytes_to_target
+ravdess,fedavg_fp32,"42,123,2024",50,2549251200.0,0.0,1.0,0.6083333333333333,0.05111916200682322,,0,,
+ravdess,bitfl,"42,123,2024",50,79847300.0,0.0,31.92657985930645,0.4527777777777778,0.021872244094477255,,0,,
+ravdess,signsgd,"42,123,2024",50,79847300.0,0.0,31.92657985930645,0.38981481481481484,0.014756830972693723,,0,,
+ravdess,w2_fp32_adam,"42,123,2024",50,2549251200.0,0.0,1.0,0.5796296296296296,0.009166199015381188,,0,,
+ravdess,cqfl,"42,123,2024",50,158923400.0,0.0,16.04075422499141,0.5768518518518518,0.042873470010334154,,0,,

@@ -7,7 +7,7 @@ from pathlib import Path
 from Bit2Communication import PROTOCOL_VERSION as CQFL_PROTOCOL
 from BitFLCommunication import PROTOCOL_VERSION as BITFL_PROTOCOL
 from cqfl.config import METHOD_NAMES
-from plot_experiment1 import collect
+from plot_experiment1 import _config_signature, collect
 from plot_experiment4 import _read_cumulative_uplink
 
 
@@ -85,6 +85,35 @@ class FiveMethodResultTests(unittest.TestCase):
                 self.assertEqual(selected, paths[method])
             cumulative = _read_cumulative_uplink(paths["bitfl"][0], "bitfl")
             self.assertEqual(cumulative.tolist(), [20, 40])
+
+    def test_bitfl_only_controls_do_not_make_other_methods_incomparable(self):
+        fedavg = {
+            "dataset": "ravdess",
+            "rounds": 50,
+            "bitfl_normalization_bound": 1.0,
+            "bitfl_topk_fraction": 0.5,
+        }
+        bitfl = {
+            "dataset": "ravdess",
+            "rounds": 50,
+            "bitfl_normalization_bound": 0.5,
+            "bitfl_topk_fraction": 0.2,
+        }
+        self.assertEqual(_config_signature(fedavg), _config_signature(bitfl))
+
+    def test_bitfl_only_controls_must_match_between_bitfl_seeds(self):
+        seeds = (42, 123, 2024)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = [self._write_run(root, "bitfl", seed) for seed in seeds]
+            config_path = paths[-1].with_name("config.json")
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config["bitfl_topk_fraction"] = 0.2
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "inconsistent bitfl-specific configurations"
+            ):
+                collect(root, "ravdess", "bitfl", seeds)
 
 
 if __name__ == "__main__":

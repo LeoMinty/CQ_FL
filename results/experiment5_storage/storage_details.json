@@ -1,0 +1,229 @@
+[
+  {
+    "dataset": "ravdess",
+    "model_profile": "standard",
+    "trainable_scalar_parameters": 6372680,
+    "trainable_tensor_count": 24,
+    "complex_tensor_count": 6,
+    "real_tensor_count": 18,
+    "fp32_weight_bytes": 25490720,
+    "fp32_adam_moment_bytes": 50981440,
+    "packed_2bit_weight_bytes": 1587442,
+    "ca4_first_moment_bytes": 3577384,
+    "ca4_second_moment_bytes": 3584660,
+    "ca4_total_moment_bytes": 7162044,
+    "block_size": 64,
+    "variables": [
+      {
+        "name": "bitfl_complex_conv_16/kernel_fp:0",
+        "shape": [
+          3,
+          3,
+          1,
+          16,
+          2
+        ],
+        "scalar_count": 288,
+        "complex_parameter": true
+      },
+      {
+        "name": "bitfl_complex_conv_16/bias:0",
+        "shape": [
+          16,
+          2
+        ],
+        "scalar_count": 32,
+        "complex_parameter": true
+      },
+      {
+        "name": "bitfl_complex_bn_16/batch_normalization/gamma:0",
+        "shape": [
+          16
+        ],
+        "scalar_count": 16,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_16/batch_normalization/beta:0",
+        "shape": [
+          16
+        ],
+        "scalar_count": 16,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_16/batch_normalization_1/gamma:0",
+        "shape": [
+          16
+        ],
+        "scalar_count": 16,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_16/batch_normalization_1/beta:0",
+        "shape": [
+          16
+        ],
+        "scalar_count": 16,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_conv_32/kernel_fp:0",
+        "shape": [
+          3,
+          3,
+          16,
+          32,
+          2
+        ],
+        "scalar_count": 9216,
+        "complex_parameter": true
+      },
+      {
+        "name": "bitfl_complex_conv_32/bias:0",
+        "shape": [
+          32,
+          2
+        ],
+        "scalar_count": 64,
+        "complex_parameter": true
+      },
+      {
+        "name": "bitfl_complex_bn_32/batch_normalization_2/gamma:0",
+        "shape": [
+          32
+        ],
+        "scalar_count": 32,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_32/batch_normalization_2/beta:0",
+        "shape": [
+          32
+        ],
+        "scalar_count": 32,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_32/batch_normalization_3/gamma:0",
+        "shape": [
+          32
+        ],
+        "scalar_count": 32,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_32/batch_normalization_3/beta:0",
+        "shape": [
+          32
+        ],
+        "scalar_count": 32,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_conv_64/kernel_fp:0",
+        "shape": [
+          3,
+          3,
+          32,
+          64,
+          2
+        ],
+        "scalar_count": 36864,
+        "complex_parameter": true
+      },
+      {
+        "name": "bitfl_complex_conv_64/bias:0",
+        "shape": [
+          64,
+          2
+        ],
+        "scalar_count": 128,
+        "complex_parameter": true
+      },
+      {
+        "name": "bitfl_complex_bn_64/batch_normalization_4/gamma:0",
+        "shape": [
+          64
+        ],
+        "scalar_count": 64,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_64/batch_normalization_4/beta:0",
+        "shape": [
+          64
+        ],
+        "scalar_count": 64,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_64/batch_normalization_5/gamma:0",
+        "shape": [
+          64
+        ],
+        "scalar_count": 64,
+        "complex_parameter": false
+      },
+      {
+        "name": "bitfl_complex_bn_64/batch_normalization_5/beta:0",
+        "shape": [
+          64
+        ],
+        "scalar_count": 64,
+        "complex_parameter": false
+      },
+      {
+        "name": "dense_256/kernel:0",
+        "shape": [
+          24576,
+          256
+        ],
+        "scalar_count": 6291456,
+        "complex_parameter": false
+      },
+      {
+        "name": "dense_256/bias:0",
+        "shape": [
+          256
+        ],
+        "scalar_count": 256,
+        "complex_parameter": false
+      },
+      {
+        "name": "dense_128/kernel:0",
+        "shape": [
+          256,
+          128
+        ],
+        "scalar_count": 32768,
+        "complex_parameter": false
+      },
+      {
+        "name": "dense_128/bias:0",
+        "shape": [
+          128
+        ],
+        "scalar_count": 128,
+        "complex_parameter": false
+      },
+      {
+        "name": "logits/kernel:0",
+        "shape": [
+          128,
+          8
+        ],
+        "scalar_count": 1024,
+        "complex_parameter": false
+      },
+      {
+        "name": "logits/bias:0",
+        "shape": [
+          8
+        ],
+        "scalar_count": 8,
+        "complex_parameter": false
+      }
+    ]
+  }
+]

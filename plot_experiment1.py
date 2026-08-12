@@ -27,7 +27,9 @@ LABELS = {
 # ``method``, ``seed`` and ``output_root`` are deliberately excluded: method
 # must differ between curves, seed must differ between repetitions, and the
 # output location has no effect on an experiment.  Every field below must be
-# identical for all curves included in one figure.
+# identical for all curves included in one figure. BitFL-only controls are
+# checked separately within the three BitFL seeds and are intentionally absent
+# here because they do not affect the other four methods.
 COMPARABLE_CONFIG_FIELDS = (
     "dataset",
     "data_path",
@@ -40,9 +42,14 @@ COMPARABLE_CONFIG_FIELDS = (
     "max_train_samples",
     "max_test_samples",
     "model_profile",
-    "bitfl_normalization_bound",
-    "bitfl_topk_fraction",
 )
+
+METHOD_SPECIFIC_CONFIG_FIELDS = {
+    "bitfl": (
+        "bitfl_normalization_bound",
+        "bitfl_topk_fraction",
+    ),
+}
 
 COMPARABLE_CONFIG_DEFAULTS = {
     "bitfl_normalization_bound": 1.0,
@@ -146,6 +153,27 @@ def _describe_config_difference(reference: dict, candidate: dict) -> str:
     return "; ".join(differences)
 
 
+def _method_config_signature(config: dict) -> Dict[str, object]:
+    fields = METHOD_SPECIFIC_CONFIG_FIELDS.get(config.get("method"), ())
+    return {
+        field: config.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        for field in fields
+    }
+
+
+def _describe_method_config_difference(reference: dict, candidate: dict) -> str:
+    fields = METHOD_SPECIFIC_CONFIG_FIELDS.get(reference.get("method"), ())
+    differences = []
+    for field in fields:
+        reference_value = reference.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        candidate_value = candidate.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        if reference_value != candidate_value:
+            differences.append(
+                f"{field}: {reference_value!r} != {candidate_value!r}"
+            )
+    return "; ".join(differences)
+
+
 def collect(
     root: Path,
     dataset: str,
@@ -191,6 +219,21 @@ def collect(
         raise FileNotFoundError(
             f"missing seeds for {dataset}/{method}: {missing}"
         )
+
+    method_reference = by_seed[requested_seeds[0]][1]
+    method_reference_path = by_seed[requested_seeds[0]][2]
+    for seed in requested_seeds[1:]:
+        candidate = by_seed[seed][1]
+        if _method_config_signature(candidate) != _method_config_signature(
+            method_reference
+        ):
+            difference = _describe_method_config_difference(
+                method_reference, candidate
+            )
+            raise ValueError(
+                f"inconsistent {method}-specific configurations: "
+                f"{method_reference_path} vs {by_seed[seed][2]}: {difference}"
+            )
 
     curves = np.stack([by_seed[seed][0] for seed in requested_seeds])
     configs = [by_seed[seed][1] for seed in requested_seeds]

@@ -1,0 +1,51 @@
+{
+  "config": {
+    "dataset": "ravdess",
+    "method": "bitfl",
+    "data_path": "ravdess_processed/ravdess_c3_stft.npz",
+    "output_root": "results/bitfl_degraded_pilot",
+    "batch_size": 32,
+    "learning_rate": 0.0003,
+    "block_size": 64,
+    "seed": 42,
+    "clients": 2,
+    "rounds": 10,
+    "local_epochs": 2,
+    "max_train_samples": 0,
+    "max_test_samples": 0,
+    "model_profile": "standard",
+    "bitfl_normalization_bound": 0.5,
+    "bitfl_topk_fraction": 0.2
+  },
+  "implementation": {
+    "core": "BitMyConv_noMul.ComplexConv2D",
+    "weight_quantizer": "original unit {+1,+i,-1,-i}",
+    "federated_update": "FedAvg client delta",
+    "uplink_protocol_version": "bitfl_v1_stochastic_1bit_tensor_fp32_scale_topk50_ef",
+    "complex_uplink": "not used by this method",
+    "real_uplink": "not used by this method",
+    "non_trainable_uplink": "FP32",
+    "optimizer": "bitfl",
+    "bitfl_baseline": {
+      "privacy_perturbation": "disabled (BitFL without DP)",
+      "stochastic_quantization": "Eq. (5), physically packed 1-bit",
+      "normalization_bound": 0.5,
+      "paper_compression_rate_0_8": "not used; paper does not define it reproducibly",
+      "topk_fraction": 0.2,
+      "error_feedback": "server residual across communication rounds"
+    }
+  },
+  "best_test_accuracy": 0.3861111111111111,
+  "final_test_accuracy": 0.3861111111111111,
+  "parameter_count": 6373128,
+  "notes": [
+    "All five methods use one complex architecture and parameter layout.",
+    "The simplified BitFL baseline uses FP32 local Adam, stochastic packed 1-bit uplink, and server top-k 50% error feedback without HLDP noise.",
+    "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
+    "CA-4bit preserves component-wise Adam second-moment equations.",
+    "The legacy demos upload FP32 masters; Bit2Communication supplies the missing packed federated codec.",
+    "CQ-FL uploads every trainable FedAvg client delta at 2-bit; complex and real tensors use separate decoders.",
+    "BatchNorm moving statistics and other non-trainable client state remain FP32.",
+    "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32."
+  ]
+}

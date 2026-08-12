@@ -1,0 +1,11 @@
+dataset,model_profile,method,representation,trainable_scalar_parameters,weight_bytes,optimizer_bytes,total_bytes,bytes_per_parameter
+ravdess,standard,fedavg_fp32,prototype,6372680,25490720,50981440,76472160,12.0
+ravdess,standard,fedavg_fp32,packed_target,6372680,25490720,50981440,76472160,12.0
+ravdess,standard,bitfl,prototype,6372680,25490720,50981440,76472160,12.0
+ravdess,standard,bitfl,packed_target,6372680,25490720,50981440,76472160,12.0
+ravdess,standard,signsgd,prototype,6372680,25490720,0,25490720,4.0
+ravdess,standard,signsgd,packed_target,6372680,25490720,0,25490720,4.0
+ravdess,standard,w2_fp32_adam,prototype,6372680,25490720,50981440,76472160,12.0
+ravdess,standard,w2_fp32_adam,packed_target,6372680,1587442,50981440,52568882,8.24910116308994
+ravdess,standard,cqfl,prototype,6372680,25490720,7162044,32652764,5.123866881751477
+ravdess,standard,cqfl,packed_target,6372680,1587442,7162044,8749486,1.3729680448414168
