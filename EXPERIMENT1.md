@@ -12,16 +12,32 @@
 | MNIST Non-IID | 10 | 50 | 2 | 10 |
 
 共同参数：学习率 `3e-4`、CA-4bit block size 64。RAVDESS 与 DroneRF 的 batch size
-固定为 32；MNIST 先用 pilot 在 128 与 256 中选定一个，此后四种方法和三个种子保持
-一致。论文正式结果固定使用随机种子 `42`、`123`、`2024`。四种方法是
-`fedavg_fp32`、`signsgd`、`w2_fp32_adam`、`cqfl`。
+固定为 32；MNIST 先用 pilot 在 128 与 256 中选定一个，此后五种方法和三个种子保持
+一致。论文正式结果固定使用随机种子 `42`、`123`、`2024`。五种方法是
+`fedavg_fp32`、`bitfl`、`signsgd`、`w2_fp32_adam`、`cqfl`。
 
-四种方法现在共用同一套复数网络和参数布局。正式入口直接复用原项目的
+五种方法现在共用同一套复数网络和参数布局。正式入口直接复用原项目的
 `BitMyConv_noMul.ComplexConv2D`、`simplified_complex_matmul`、
 `Bit2Conv.ComplexMaxPool2D` 以及 `Bit2Linear.RealToComplex/TakeReal`；新包只负责
 数据、实验组织、CA-4bit 状态和结果记录。原项目的联邦 demo 实际上传FP32主权重，并没有
 2-bit通信编码器；正式入口新增的 `Bit2Communication.py` 专门补齐真实的2-bit打包、解码
 和服务端聚合边界。
+
+## BitFL 参照组（简化、无隐私扰动）
+
+第五种 `bitfl` 依据 `BitFL.pdf` 的无 DP 效率实验实现：
+
+- 本地模型训练与通信量化解耦，使用与 FedAvg 相同的 FP32 模型和 FP32 Adam；
+- 每个客户端对全部 trainable 模型增量逐张量归一化到 `[-1,1]`；
+- 按论文式 (5) 使用 `P(+1)=(z+1)/2` 的无偏随机 1-bit 编码，并真实执行 bit pack/unpack；
+- 每张量传输一个 FP32 scale，服务端聚合的是实际解码后的更新；
+- 服务器按论文实验默认值保留绝对值最大的 top-k 50%，未选部分跨轮误差累积；
+- 不启用 HLDP bit flip，从而与论文 Fig. 5 的 “BitFL without DP” 对应，不把隐私预算引入主算法比较。
+
+论文提到的 `compression rate=0.8` 未给出可复现的数学定义，简化实现不擅自使用该值，
+而采用式 (5) 明确要求的 `[-1,1]` 归一化。当前模拟器仍广播完整 FP32 全局状态；top-k
+控制服务器实际应用的聚合更新并保存残差，不作为稀疏下行网络包。因此实验 4 的 BitFL
+上行 1-bit payload 是可审计的，下行不应声称完整复现文献的稀疏传输。
 
 ## 数据准备
 
@@ -50,8 +66,8 @@ MNIST 由 TensorFlow 自动下载，采用经典 shard 划分，每个客户端�
 
 标准模型使用三层复数卷积 `16/32/64` 和两层全连接 `256/128`。完整MNIST在CPU-Offload
 逐批训练路径下耗时较长，因此提供显式的 `--model-profile mnist_small`：两层复数卷积
-`8/16` 和一层全连接 `64`。四种方法仍共享完全相同的模型，权重、梯度、优化器和通信量化
-定义不变；该选项只允许用于MNIST。正式实验一旦选择某个模型配置，四种方法和三个种子都
+`8/16` 和一层全连接 `64`。五种方法仍共享完全相同的模型结构；该选项只允许用于MNIST。
+正式实验一旦选择某个模型配置，五种方法和三个种子都
 必须保持一致，不能把 `standard` 与 `mnist_small` 的结果合并。
 
 正式运行前建议分别测试 batch 128 和 256 的单轮耗时及 5 轮收敛情况。单轮计时应至少
@@ -76,18 +92,29 @@ python -u run_experiment1.py --dataset mnist --method all \
 ```
 
 优先检查 `mnist_small + batch 128`，它只改变模型容量且比 batch 256 保留更多本地更新步数。
-如果仍然过慢，再比较 batch 256 的 5 轮精度趋势。选择完成后，MNIST 的全部四种方法、
+如果仍然过慢，再比较 batch 256 的 5 轮精度趋势。选择完成后，MNIST 的全部五种方法、
 三个种子和所有正式轮次必须使用同一组 `model-profile` 与 `batch-size`。
 
 ## 云端先做冒烟测试
 
-先用少量样本验证显存、输入形状和四种优化路径：
+先用少量样本验证显存、输入形状和五种优化路径：
 
 ```bash
 python run_experiment1.py --dataset mnist --method all \
   --rounds 1 --local-epochs 1 --batch-size 128 \
   --model-profile mnist_small \
   --max-train-samples 3200 --max-test-samples 1000
+```
+
+新增 BitFL 后，建议先单独运行一个 RAVDESS 一轮 smoke，并核对日志中出现
+`uplink_bitfl_1bit_bytes > 0`：
+
+```bash
+python -u run_experiment1.py \
+  --dataset ravdess --method bitfl \
+  --rounds 1 --local-epochs 1 \
+  --max-train-samples 128 --max-test-samples 128 \
+  --seed 42 --output-root results/bitfl_smoke
 ```
 
 冒烟测试通过后，使用一个全新的正式结果目录。不要把 smoke、pilot 或不同参数的结果
@@ -135,7 +162,7 @@ results/experiment1_final/<dataset>/<method>/seed_<seed>_<timestamp>/
 和 DroneRF 的 seed 同时控制数据/物理组划分、客户端分配和训练随机性；MNIST 使用固定官方
 测试集，seed 控制 Non-IID shard 分配和训练随机性。论文中应明确说明这一点。
 
-正式绘图工具默认严格要求 `42`、`123`、`2024` 各出现一次，并检查四种方法的配置和轮数
+正式绘图工具默认严格要求 `42`、`123`、`2024` 各出现一次，并检查五种方法的配置和轮数
 完全一致。缺少种子、重复运行、混入额外种子、配置不同或轮数不完整都会报错。运行：
 
 ```bash
@@ -162,8 +189,9 @@ results/experiment1_final/ravdess_accuracy_summary.csv
 实验1的 `metrics.csv` 会逐轮保存 `test_accuracy` 和 `uplink_bytes`，因此同一版算法的实验4
 不需要另外训练。注意：在加入 `Bit2Communication.py` 之前产生的 CQ-FL 结果只压缩了复数
 张量，不能用于“全可训练参数2-bit上行”的实验4；绘图器会识别并拒绝这种旧文件。旧的
-FedAvg、SignSGD 和 `w2_fp32_adam` 结果未改变，但 CQ-FL 必须用新代码重新运行。
-以下命令严格读取四种方法和三个正式种子，先对每个种子的上行字节逐轮累加，再绘制平均
+新增 BitFL 后，正式结果根目录必须包含五种方法；若使用旧四方案结果，只需在同一套代码和
+配置下补跑 `bitfl` 的三个种子，但为了最强可比性仍推荐五种方法全部重跑到干净目录。
+以下命令严格读取五种方法和三个正式种子，先对每个种子的上行字节逐轮累加，再绘制平均
 精度和标准差阴影：
 
 ```bash
@@ -184,7 +212,7 @@ results/experiment1_final/ravdess_communication_summary.csv
 该精度所需的平均上行字节数和成功达到目标的种子数。这里的 `uplink_bytes` 是所有客户端
 理想位打包负载之和，不包含网络协议头，也不等于通信耗时。新 CQ-FL 文件还记录
 `uplink_complex_2bit_bytes`、`uplink_real_2bit_bytes` 与 `uplink_non_trainable_bytes`；
-绘图前会检查这些分项之和是否等于总字节数。
+BitFL 文件记录 `uplink_bitfl_1bit_bytes`。绘图前会检查各方法分项之和是否等于总字节数。
 
 ## 实现边界
 
@@ -208,3 +236,6 @@ results/experiment1_final/ravdess_communication_summary.csv
   编码，服务端实际聚合的是解码值，而不是只在统计图中按2-bit估算字节。它是草稿中“上传
   梯度”的可执行 FedAvg 对应物；论文应称为“量化客户端更新”，除非后续把服务端改成逐梯度
   FedOpt。BN moving mean/variance 等非可训练状态仍按FP32上传并如实计入。
+- 新增的论文 `bitfl` 参照组与旧代码中“原 BitFL 复数层”不是同一概念：前者是
+  `BitFL.pdf` 的随机 1-bit 联邦上行与 top-k 误差反馈，后者是本项目历史上的复数 2-bit
+  计算层。论文和图例中必须用 `BitFL (1-bit + top-k EF)` 区分。

@@ -17,6 +17,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+from BitFLCommunication import PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION
 from cqfl.config import METHOD_NAMES
 from plot_experiment1 import (
     LABELS,
@@ -35,6 +36,7 @@ UNIT_DIVISORS = {
 
 STYLES = {
     "fedavg_fp32": {"color": "#1f77b4", "linestyle": "-"},
+    "bitfl": {"color": "#9467bd", "linestyle": ":"},
     "signsgd": {"color": "#ff7f0e", "linestyle": "--"},
     "w2_fp32_adam": {"color": "#2ca02c", "linestyle": "-."},
     "cqfl": {"color": "#d62728", "linestyle": "-"},
@@ -96,6 +98,41 @@ def _read_cumulative_uplink(metrics_path: Path, method: str) -> np.ndarray:
                 raise ValueError(
                     f"CQ-FL did not encode both complex and real trainable "
                     f"updates in {metrics_path}, row {row_index}"
+                )
+
+    if method == "bitfl":
+        required = {
+            "uplink_trainable_bytes",
+            "uplink_bitfl_1bit_bytes",
+            "uplink_non_trainable_bytes",
+            "uplink_protocol",
+        }
+        missing = required.difference(rows[0])
+        if missing:
+            raise ValueError(
+                f"{metrics_path} is missing BitFL accounting fields: {sorted(missing)}"
+            )
+        for row_index, row in enumerate(rows, start=1):
+            try:
+                total = int(row["uplink_bytes"])
+                trainable = int(row["uplink_trainable_bytes"])
+                one_bit = int(row["uplink_bitfl_1bit_bytes"])
+                non_trainable = int(row["uplink_non_trainable_bytes"])
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"invalid BitFL byte split in {metrics_path}, row {row_index}"
+                ) from error
+            if row["uplink_protocol"] != BITFL_PROTOCOL_VERSION:
+                raise ValueError(
+                    f"unsupported BitFL protocol in {metrics_path}, row {row_index}"
+                )
+            if trainable != one_bit or total != one_bit + non_trainable:
+                raise ValueError(
+                    f"BitFL byte split does not add up in {metrics_path}, row {row_index}"
+                )
+            if one_bit <= 0:
+                raise ValueError(
+                    f"BitFL has no packed 1-bit payload in {metrics_path}, row {row_index}"
                 )
 
     try:

@@ -7,6 +7,7 @@ from typing import Dict, Tuple
 
 METHOD_NAMES: Tuple[str, ...] = (
     "fedavg_fp32",
+    "bitfl",
     "signsgd",
     "w2_fp32_adam",
     "cqfl",
@@ -67,6 +68,8 @@ class ExperimentConfig:
     max_train_samples: int = 0
     max_test_samples: int = 0
     model_profile: str = "standard"
+    bitfl_normalization_bound: float = 1.0
+    bitfl_topk_fraction: float = 0.5
 
     def resolved(self) -> "ExperimentConfig":
         if self.dataset not in DATASET_CONFIGS:
@@ -77,6 +80,10 @@ class ExperimentConfig:
             raise ValueError(f"unknown model profile: {self.model_profile}")
         if self.model_profile == "mnist_small" and self.dataset != "mnist":
             raise ValueError("mnist_small model profile is only valid for MNIST")
+        if not 0.0 < self.bitfl_normalization_bound <= 1.0:
+            raise ValueError("bitfl_normalization_bound must lie in (0, 1]")
+        if not 0.0 < self.bitfl_topk_fraction <= 1.0:
+            raise ValueError("bitfl_topk_fraction must lie in (0, 1]")
         ds = DATASET_CONFIGS[self.dataset]
         self.clients = self.clients or ds.clients
         self.rounds = self.rounds or ds.rounds

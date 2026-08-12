@@ -95,6 +95,25 @@ class FederatedWiringTests(unittest.TestCase):
                 prepared[index].numpy(), gradients[index].numpy()
             )
 
+    def test_bitfl_uses_fp32_local_model_and_adam(self):
+        from BitMyConv_noMul import ComplexConv2D
+        from cqfl.config import ExperimentConfig
+        from cqfl.federated import BitFLOffloadTrainer
+        from cqfl.models import build_model
+
+        model = build_model((8, 8, 1, 2), 2, "bitfl", "standard")
+        _ = model(tf.zeros((1, 8, 8, 1, 2), dtype=tf.float32), training=False)
+        complex_layers = [
+            layer for layer in model.layers if isinstance(layer, ComplexConv2D)
+        ]
+        self.assertTrue(complex_layers)
+        self.assertTrue(all(not layer.use_quant for layer in complex_layers))
+        self.assertTrue(all(not layer.quantize_backward for layer in complex_layers))
+
+        config = ExperimentConfig(dataset="ravdess", method="bitfl")
+        trainer = BitFLOffloadTrainer(model, "bitfl", config)
+        self.assertIsInstance(trainer.optimizer, tf.keras.optimizers.Adam)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,7 +30,7 @@ def build_model(
     architecture with the weight quantizer disabled, keeping parameter layouts
     comparable.
     """
-    if method not in {"fedavg_fp32", "signsgd", "w2_fp32_adam", "cqfl"}:
+    if method not in {"fedavg_fp32", "bitfl", "signsgd", "w2_fp32_adam", "cqfl"}:
         raise ValueError(f"unknown method: {method}")
     if model_profile == "standard":
         convolution_filters = (16, 32, 64)

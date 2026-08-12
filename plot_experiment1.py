@@ -12,11 +12,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from Bit2Communication import PROTOCOL_VERSION
+from BitFLCommunication import PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION
 from cqfl.config import METHOD_NAMES
 
 
 LABELS = {
     "fedavg_fp32": "FedAvg (FP32)",
+    "bitfl": "BitFL (1-bit + top-k EF)",
     "signsgd": "SignSGD",
     "w2_fp32_adam": "2-bit W + FP32 Adam",
     "cqfl": "CQ-FL",
@@ -38,7 +40,14 @@ COMPARABLE_CONFIG_FIELDS = (
     "max_train_samples",
     "max_test_samples",
     "model_profile",
+    "bitfl_normalization_bound",
+    "bitfl_topk_fraction",
 )
+
+COMPARABLE_CONFIG_DEFAULTS = {
+    "bitfl_normalization_bound": 1.0,
+    "bitfl_topk_fraction": 0.5,
+}
 
 
 def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
@@ -66,6 +75,15 @@ def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
                 "uplink_protocol",
             }
         )
+    if config.get("method") == "bitfl":
+        required_columns.update(
+            {
+                "uplink_trainable_bytes",
+                "uplink_bitfl_1bit_bytes",
+                "uplink_non_trainable_bytes",
+                "uplink_protocol",
+            }
+        )
     missing_columns = required_columns.difference(rows[0])
     if missing_columns:
         if config.get("method") == "cqfl" and "uplink_real_2bit_bytes" in missing_columns:
@@ -82,6 +100,13 @@ def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
             raise ValueError(
                 f"unsupported CQ-FL uplink protocol in {metrics_path}: "
                 f"{sorted(protocols)!r}; expected {PROTOCOL_VERSION!r}"
+            )
+    if config.get("method") == "bitfl":
+        protocols = {row["uplink_protocol"] for row in rows}
+        if protocols != {BITFL_PROTOCOL_VERSION}:
+            raise ValueError(
+                f"unsupported BitFL uplink protocol in {metrics_path}: "
+                f"{sorted(protocols)!r}; expected {BITFL_PROTOCOL_VERSION!r}"
             )
 
     recorded_rounds = [int(row["round"]) for row in rows]
@@ -103,15 +128,20 @@ def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
 
 
 def _config_signature(config: dict) -> Dict[str, object]:
-    return {field: config.get(field) for field in COMPARABLE_CONFIG_FIELDS}
+    return {
+        field: config.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        for field in COMPARABLE_CONFIG_FIELDS
+    }
 
 
 def _describe_config_difference(reference: dict, candidate: dict) -> str:
     differences = []
     for field in COMPARABLE_CONFIG_FIELDS:
-        if reference.get(field) != candidate.get(field):
+        reference_value = reference.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        candidate_value = candidate.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        if reference_value != candidate_value:
             differences.append(
-                f"{field}: {reference.get(field)!r} != {candidate.get(field)!r}"
+                f"{field}: {reference_value!r} != {candidate_value!r}"
             )
     return "; ".join(differences)
 

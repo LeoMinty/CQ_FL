@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument("--max-train-samples", type=int, default=0)
     parser.add_argument("--max-test-samples", type=int, default=0)
     parser.add_argument("--model-profile", choices=MODEL_PROFILES, default="standard")
+    parser.add_argument("--bitfl-normalization-bound", type=float, default=1.0)
+    parser.add_argument("--bitfl-topk-fraction", type=float, default=0.5)
     return parser.parse_args()
 
 
@@ -49,6 +51,8 @@ def main():
             max_train_samples=args.max_train_samples,
             max_test_samples=args.max_test_samples,
             model_profile=args.model_profile,
+            bitfl_normalization_bound=args.bitfl_normalization_bound,
+            bitfl_topk_fraction=args.bitfl_topk_fraction,
         )
         output = run(config)
         print(f"completed: {output}")

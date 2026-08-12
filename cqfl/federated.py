@@ -21,6 +21,11 @@ from Bit2Communication import (
     quantize_complex_update_np,
     quantize_real_update_np,
 )
+from BitFLCommunication import (
+    PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION,
+    quantize_update_np as quantize_bitfl_update_np,
+    topk_error_feedback as bitfl_topk_error_feedback,
+)
 
 from .ca4bit import CA4BitAdam
 from .config import ExperimentConfig
@@ -86,7 +91,13 @@ def _quantized_broadcast(
     return output, int(payload)
 
 
-def _quantized_upload(delta: np.ndarray, method: str, is_complex: bool):
+def _quantized_upload(
+    delta: np.ndarray,
+    method: str,
+    is_complex: bool,
+    rng: np.random.Generator = None,
+    bitfl_normalization_bound: float = 1.0,
+):
     """Encode the message that is actually reconstructed by the server.
 
     The legacy BitFL demos upload FP32 master weights and contain no low-bit
@@ -97,6 +108,13 @@ def _quantized_upload(delta: np.ndarray, method: str, is_complex: bool):
     subset.  Non-trainable state is handled separately in FP32.
     """
     delta = np.asarray(delta, dtype=np.float32)
+    if method == "bitfl":
+        if rng is None:
+            raise ValueError("BitFL stochastic quantization requires an explicit RNG")
+        reconstructed, payload = quantize_bitfl_update_np(
+            delta, rng, bitfl_normalization_bound
+        )
+        return reconstructed, payload, "bitfl_1bit"
     if method == "cqfl":
         if is_complex:
             reconstructed, payload = quantize_complex_update_np(delta)
@@ -363,12 +381,14 @@ def run(config: ExperimentConfig) -> Path:
         "uplink_trainable_bytes",
         "uplink_complex_2bit_bytes",
         "uplink_real_2bit_bytes",
+        "uplink_bitfl_1bit_bytes",
         "uplink_non_trainable_bytes",
         "downlink_bytes",
         "optimizer_state_bytes",
         "round_seconds",
     ]
     history = []
+    bitfl_error = [np.zeros_like(value) for value in global_trainable]
     with (output / "metrics.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
@@ -387,6 +407,7 @@ def run(config: ExperimentConfig) -> Path:
             uplink_trainable_bytes = 0
             uplink_complex_2bit_bytes = 0
             uplink_real_2bit_bytes = 0
+            uplink_bitfl_1bit_bytes = 0
             uplink_non_trainable_bytes = 0
             for client_id, (trainer, (x_client, y_client)) in enumerate(zip(clients, bundle.clients)):
                 trainer.set_state(broadcast_trainable, broadcast_non_trainable)
@@ -401,6 +422,9 @@ def run(config: ExperimentConfig) -> Path:
                 )
                 local_trainable, local_non_trainable = trainer.get_state()
                 encoded_trainable = []
+                bitfl_rng = np.random.default_rng(
+                    config.seed + round_index * 1_000_003 + client_id * 10_007
+                )
                 for local, base, is_complex in zip(
                     local_trainable,
                     broadcast_trainable,
@@ -410,6 +434,8 @@ def run(config: ExperimentConfig) -> Path:
                         local - base,
                         config.method,
                         is_complex,
+                        rng=bitfl_rng,
+                        bitfl_normalization_bound=config.bitfl_normalization_bound,
                     )
                     encoded_trainable.append(reconstructed)
                     uplink_bytes += payload
@@ -418,6 +444,8 @@ def run(config: ExperimentConfig) -> Path:
                         uplink_complex_2bit_bytes += payload
                     elif encoding == "real_2bit":
                         uplink_real_2bit_bytes += payload
+                    elif encoding == "bitfl_1bit":
+                        uplink_bitfl_1bit_bytes += payload
                 encoded_non_trainable = []
                 for local, base in zip(local_non_trainable, broadcast_non_trainable):
                     delta = local - base
@@ -428,9 +456,19 @@ def run(config: ExperimentConfig) -> Path:
                 non_trainable_deltas.append(encoded_non_trainable)
                 sample_counts.append(len(y_client))
 
+            aggregated_trainable = [
+                _weighted_mean(trainable_deltas, sample_counts, index)
+                for index in range(len(broadcast_trainable))
+            ]
+            if config.method == "bitfl":
+                aggregated_trainable, bitfl_error = bitfl_topk_error_feedback(
+                    aggregated_trainable,
+                    bitfl_error,
+                    config.bitfl_topk_fraction,
+                )
             global_trainable = [
-                base + _weighted_mean(trainable_deltas, sample_counts, index)
-                for index, base in enumerate(broadcast_trainable)
+                base + update
+                for base, update in zip(broadcast_trainable, aggregated_trainable)
             ]
             global_non_trainable = [
                 base + _weighted_mean(non_trainable_deltas, sample_counts, index)
@@ -450,12 +488,17 @@ def run(config: ExperimentConfig) -> Path:
                 "test_loss": test_loss,
                 "test_accuracy": test_accuracy,
                 "uplink_protocol": (
-                    PROTOCOL_VERSION if config.method == "cqfl" else config.method
+                    PROTOCOL_VERSION
+                    if config.method == "cqfl"
+                    else BITFL_PROTOCOL_VERSION
+                    if config.method == "bitfl"
+                    else config.method
                 ),
                 "uplink_bytes": int(uplink_bytes),
                 "uplink_trainable_bytes": int(uplink_trainable_bytes),
                 "uplink_complex_2bit_bytes": int(uplink_complex_2bit_bytes),
                 "uplink_real_2bit_bytes": int(uplink_real_2bit_bytes),
+                "uplink_bitfl_1bit_bytes": int(uplink_bitfl_1bit_bytes),
                 "uplink_non_trainable_bytes": int(uplink_non_trainable_bytes),
                 "downlink_bytes": int(
                     (trainable_downlink + non_trainable_downlink) * config.clients
@@ -481,7 +524,11 @@ def run(config: ExperimentConfig) -> Path:
             "weight_quantizer": "original unit {+1,+i,-1,-i}",
             "federated_update": "FedAvg client delta",
             "uplink_protocol_version": (
-                PROTOCOL_VERSION if config.method == "cqfl" else config.method
+                PROTOCOL_VERSION
+                if config.method == "cqfl"
+                else BITFL_PROTOCOL_VERSION
+                if config.method == "bitfl"
+                else config.method
             ),
             "complex_uplink": (
                 "packed 2-bit phase code + one FP32 tensor scale"
@@ -495,12 +542,25 @@ def run(config: ExperimentConfig) -> Path:
             ),
             "non_trainable_uplink": "FP32",
             "optimizer": "CA4BitAdam" if config.method == "cqfl" else config.method,
+            "bitfl_baseline": (
+                {
+                    "privacy_perturbation": "disabled (BitFL without DP)",
+                    "stochastic_quantization": "Eq. (5), physically packed 1-bit",
+                    "normalization_bound": config.bitfl_normalization_bound,
+                    "paper_compression_rate_0_8": "not used; paper does not define it reproducibly",
+                    "topk_fraction": config.bitfl_topk_fraction,
+                    "error_feedback": "server residual across communication rounds",
+                }
+                if config.method == "bitfl"
+                else "not used by this method"
+            ),
         },
         "best_test_accuracy": max(row["test_accuracy"] for row in history),
         "final_test_accuracy": history[-1]["test_accuracy"],
         "parameter_count": int(global_model.count_params()),
         "notes": [
-            "All four methods use one complex architecture and parameter layout.",
+            "All five methods use one complex architecture and parameter layout.",
+            "The simplified BitFL baseline uses FP32 local Adam, stochastic packed 1-bit uplink, and server top-k 50% error feedback without HLDP noise.",
             "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
             "CA-4bit preserves component-wise Adam second-moment equations.",
             "The legacy demos upload FP32 masters; Bit2Communication supplies the missing packed federated codec.",

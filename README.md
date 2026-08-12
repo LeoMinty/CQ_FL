@@ -49,7 +49,7 @@ CQ-FL/
 正式论文实验一另外使用：
 
 ```text
-run_experiment1.py               # 三数据集、四方案统一入口
+run_experiment1.py               # 三数据集、五方案统一入口
 cqfl/models.py                   # 组装原BitFL层，不重复实现ComplexConv
 cqfl/federated.py                # CPU主权重、客户端训练与FedAvg
 cqfl/ca4bit.py                   # CPMQ一阶矩 + 逐分量4-bit二阶矩
@@ -134,7 +134,8 @@ B = -i:  C =  b - ai    (交换+负)
 
 ## 使用方式
 
-> 论文草稿中的三数据集、四方案“实验一”已迁移到独立入口。云端运行和数据准备命令见
+> 论文草稿中的三数据集、五方案“实验一”已迁移到独立入口。第五方案为 `BitFL.pdf`
+> 的简化无 DP 参照组：FP32 本地训练、随机 1-bit 上行、top-k 50% 误差反馈。云端运行和数据准备命令见
 > [EXPERIMENT1.md](EXPERIMENT1.md)。原有 `FLConfig.py` 与 `FLConfig_ravdess.py`
 > 仅作为早期 demo 保留，不应再用于论文正式结果。
 
