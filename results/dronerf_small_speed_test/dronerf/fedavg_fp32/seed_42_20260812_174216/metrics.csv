@@ -1,0 +1,2 @@
+round,train_loss,test_loss,test_accuracy,uplink_protocol,uplink_bytes,uplink_trainable_bytes,uplink_complex_2bit_bytes,uplink_real_2bit_bytes,uplink_bitfl_1bit_bytes,uplink_non_trainable_bytes,downlink_bytes,optimizer_state_bytes,round_seconds
+1,1.1307982265665417,1.2767292216618855,0.38911111111111113,fedavg_fp32,2681680,2679760,0,0,0,1920,2681680,5359560,12.730525763705373

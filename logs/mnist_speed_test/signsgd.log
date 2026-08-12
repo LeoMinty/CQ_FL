@@ -1,0 +1,2 @@
+[mnist/signsgd] round 001/1: loss=2.3095, acc=0.1451, time=28.5s
+completed: results/mnist_speed_test/mnist/signsgd/seed_42_20260812_171551

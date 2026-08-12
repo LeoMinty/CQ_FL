@@ -1,0 +1,2 @@
+round,train_loss,test_loss,test_accuracy,uplink_protocol,uplink_bytes,uplink_trainable_bytes,uplink_complex_2bit_bytes,uplink_real_2bit_bytes,uplink_bitfl_1bit_bytes,uplink_non_trainable_bytes,downlink_bytes,optimizer_state_bytes,round_seconds
+1,2.20328591975073,2.309485906600952,0.1451,signsgd,71340,67500,0,0,0,3840,2143120,0,28.470226537436247

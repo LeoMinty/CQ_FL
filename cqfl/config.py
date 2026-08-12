@@ -16,6 +16,7 @@ METHOD_NAMES: Tuple[str, ...] = (
 MODEL_PROFILES: Tuple[str, ...] = (
     "standard",
     "mnist_small",
+    "dronerf_small",
 )
 
 
@@ -80,6 +81,8 @@ class ExperimentConfig:
             raise ValueError(f"unknown model profile: {self.model_profile}")
         if self.model_profile == "mnist_small" and self.dataset != "mnist":
             raise ValueError("mnist_small model profile is only valid for MNIST")
+        if self.model_profile == "dronerf_small" and self.dataset != "dronerf":
+            raise ValueError("dronerf_small model profile is only valid for DroneRF")
         if not 0.0 < self.bitfl_normalization_bound <= 1.0:
             raise ValueError("bitfl_normalization_bound must lie in (0, 1]")
         if not 0.0 < self.bitfl_topk_fraction <= 1.0:

@@ -1,0 +1,2 @@
+[mnist/bitfl] round 001/1: loss=2.2991, acc=0.1391, time=35.9s
+completed: results/mnist_speed_test/mnist/bitfl/seed_42_20260812_171508

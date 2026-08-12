@@ -35,7 +35,7 @@ def build_model(
     if model_profile == "standard":
         convolution_filters = (16, 32, 64)
         dense_units = (256, 128)
-    elif model_profile == "mnist_small":
+    elif model_profile in {"mnist_small", "dronerf_small"}:
         convolution_filters = (8, 16)
         dense_units = (64,)
     else:

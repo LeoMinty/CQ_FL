@@ -1,0 +1,2 @@
+round,train_loss,test_loss,test_accuracy,uplink_protocol,uplink_bytes,uplink_trainable_bytes,uplink_complex_2bit_bytes,uplink_real_2bit_bytes,uplink_bitfl_1bit_bytes,uplink_non_trainable_bytes,downlink_bytes,optimizer_state_bytes,round_seconds
+1,1.1138632311015393,1.069509959856669,0.48488888888888887,cqfl_uplink_v3_deterministic_phase_tensor_fp32_scale,736565,727605,29240,698365,0,8960,11210500,3367000,222.26657000742853

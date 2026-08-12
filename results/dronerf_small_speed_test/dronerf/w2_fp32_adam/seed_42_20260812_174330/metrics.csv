@@ -1,0 +1,2 @@
+round,train_loss,test_loss,test_accuracy,uplink_protocol,uplink_bytes,uplink_trainable_bytes,uplink_complex_2bit_bytes,uplink_real_2bit_bytes,uplink_bitfl_1bit_bytes,uplink_non_trainable_bytes,downlink_bytes,optimizer_state_bytes,round_seconds
+1,1.178901485971042,1.5104822153515285,0.33844444444444444,w2_fp32_adam,2681680,2679760,0,0,0,1920,2634250,5359560,14.78662402741611

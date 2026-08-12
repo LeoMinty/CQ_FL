@@ -1,0 +1,2 @@
+round,train_loss,test_loss,test_accuracy,uplink_protocol,uplink_bytes,uplink_trainable_bytes,uplink_complex_2bit_bytes,uplink_real_2bit_bytes,uplink_bitfl_1bit_bytes,uplink_non_trainable_bytes,downlink_bytes,optimizer_state_bytes,round_seconds
+1,1.0793010702505361,1.8406021818055047,0.06244444444444444,bitfl_v1_stochastic_1bit_tensor_fp32_scale_topk50_ef,387565,378605,0,0,378605,8960,12108880,24199880,116.96285805664957

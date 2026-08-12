@@ -1,0 +1,2 @@
+[mnist/fedavg_fp32] round 001/1: loss=2.2821, acc=0.1734, time=35.7s
+completed: results/mnist_speed_test/mnist/fedavg_fp32/seed_42_20260812_171426

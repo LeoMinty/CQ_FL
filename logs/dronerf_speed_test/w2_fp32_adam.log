@@ -1,0 +1,2 @@
+[dronerf/w2_fp32_adam] round 001/1: loss=1.0096, acc=0.4942, time=161.1s
+completed: results/dronerf_speed_test/dronerf/w2_fp32_adam/seed_42_20260812_172814

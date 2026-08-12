@@ -1,0 +1,2 @@
+[dronerf/fedavg_fp32] round 001/1: loss=1.5030, acc=0.4093, time=121.6s
+completed: results/dronerf_speed_test/dronerf/fedavg_fp32/seed_42_20260812_172155
