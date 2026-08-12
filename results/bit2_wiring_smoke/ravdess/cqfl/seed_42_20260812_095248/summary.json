@@ -1,0 +1,40 @@
+{
+  "config": {
+    "dataset": "ravdess",
+    "method": "cqfl",
+    "data_path": "ravdess_processed/ravdess_c3_stft.npz",
+    "output_root": "results/bit2_wiring_smoke",
+    "batch_size": 32,
+    "learning_rate": 0.0003,
+    "block_size": 64,
+    "seed": 42,
+    "clients": 2,
+    "rounds": 1,
+    "local_epochs": 1,
+    "max_train_samples": 64,
+    "max_test_samples": 32,
+    "model_profile": "standard"
+  },
+  "implementation": {
+    "core": "BitMyConv_noMul.ComplexConv2D",
+    "weight_quantizer": "original unit {+1,+i,-1,-i}",
+    "federated_update": "FedAvg client delta",
+    "uplink_protocol_version": "cqfl_uplink_v3_deterministic_phase_tensor_fp32_scale",
+    "complex_uplink": "packed 2-bit phase code + one FP32 tensor scale",
+    "real_uplink": "packed 2-bit real-axis code + one FP32 tensor scale",
+    "non_trainable_uplink": "FP32",
+    "optimizer": "CA4BitAdam"
+  },
+  "best_test_accuracy": 0.125,
+  "final_test_accuracy": 0.125,
+  "parameter_count": 6373128,
+  "notes": [
+    "All four methods use one complex architecture and parameter layout.",
+    "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
+    "CA-4bit preserves component-wise Adam second-moment equations.",
+    "The legacy demos upload FP32 masters; Bit2Communication supplies the missing packed federated codec.",
+    "CQ-FL uploads every trainable FedAvg client delta at 2-bit; complex and real tensors use separate decoders.",
+    "BatchNorm moving statistics and other non-trainable client state remain FP32.",
+    "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32."
+  ]
+}

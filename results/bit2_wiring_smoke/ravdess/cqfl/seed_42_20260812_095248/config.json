@@ -1,0 +1,16 @@
+{
+  "dataset": "ravdess",
+  "method": "cqfl",
+  "data_path": "ravdess_processed/ravdess_c3_stft.npz",
+  "output_root": "results/bit2_wiring_smoke",
+  "batch_size": 32,
+  "learning_rate": 0.0003,
+  "block_size": 64,
+  "seed": 42,
+  "clients": 2,
+  "rounds": 1,
+  "local_epochs": 1,
+  "max_train_samples": 64,
+  "max_test_samples": 32,
+  "model_profile": "standard"
+}

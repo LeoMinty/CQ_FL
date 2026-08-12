@@ -18,17 +18,27 @@ except ImportError:  # Allows NumPy-side data preparation without TensorFlow.
 
 
 def phase_codes_np(values: np.ndarray) -> np.ndarray:
-    """Return codes 0:+R, 1:+I, 2:-R, 3:-I for [..., 2] values."""
-    values = np.asarray(values)
-    if values.shape[-1] != 2:
-        raise ValueError("phase quantization expects a final [real, imag] axis")
-    real, imag = values[..., 0], values[..., 1]
-    angles = np.arctan2(imag, real).astype(np.float32)
-    quarter_pi = np.float32(np.pi / 4.0)
+    """Deterministic codes 0:+R, 1:+I, 2:-R, 3:-I."""
+    values = np.asarray(values, dtype=np.float32)
+    if values.ndim < 1 or values.shape[-1] != 2:
+        raise ValueError(
+            "complex phase coding expects a final [real, imag] axis"
+        )
+
+    real = values[..., 0]
+    imag = values[..., 1]
+
+    # Exact boundary convention:
+    #  45° -> +I, 135° -> -R, 225° -> -I, 315° -> +R.
+    positive_real = (imag >= -real) & (imag < real)
+    positive_imag = (imag >= real) & (imag > -real)
+    negative_real = (imag <= -real) & (imag > real)
+    zero = (real == 0.0) & (imag == 0.0)
+
     codes = np.full(real.shape, 3, dtype=np.uint8)
-    codes[(angles >= -quarter_pi) & (angles < quarter_pi)] = 0
-    codes[(angles >= quarter_pi) & (angles < 3.0 * quarter_pi)] = 1
-    codes[(angles >= 3.0 * quarter_pi) | (angles < -3.0 * quarter_pi)] = 2
+    codes[positive_real | zero] = 0
+    codes[positive_imag] = 1
+    codes[negative_real] = 2
     return codes
 
 

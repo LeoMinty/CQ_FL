@@ -1,0 +1,6 @@
+[ravdess/cqfl] round 001/5: loss=4.5390, acc=0.2528, time=60.1s
+[ravdess/cqfl] round 002/5: loss=2.2577, acc=0.3583, time=58.4s
+[ravdess/cqfl] round 003/5: loss=1.7764, acc=0.4139, time=58.2s
+[ravdess/cqfl] round 004/5: loss=1.5137, acc=0.4750, time=57.2s
+[ravdess/cqfl] round 005/5: loss=1.4607, acc=0.4611, time=56.5s
+completed: results/full2bit_v3_pilot/ravdess/cqfl/seed_42_20260812_095401
