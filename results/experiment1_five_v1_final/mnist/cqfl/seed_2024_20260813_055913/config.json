@@ -1,0 +1,18 @@
+{
+  "dataset": "mnist",
+  "method": "cqfl",
+  "data_path": "",
+  "output_root": "results/experiment1_five_v1_final",
+  "batch_size": 256,
+  "learning_rate": 0.0003,
+  "block_size": 64,
+  "seed": 2024,
+  "clients": 10,
+  "rounds": 50,
+  "local_epochs": 2,
+  "max_train_samples": 0,
+  "max_test_samples": 0,
+  "model_profile": "mnist_small",
+  "bitfl_normalization_bound": 1.0,
+  "bitfl_topk_fraction": 0.5
+}
