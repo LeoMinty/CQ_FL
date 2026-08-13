@@ -1,0 +1,40 @@
+2026-08-13 12:19:34.201514: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-08-13 12:19:35.358461: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-08-13 12:19:35.358621: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-08-13 12:19:35.551597: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-08-13 12:19:35.933343: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-08-13 12:19:37.761294: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+2026-08-13 12:19:49.921352: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1929] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 30447 MB memory:  -> device: 0, name: NVIDIA GeForce RTX 4080, pci bus id: 0000:db:00.0, compute capability: 8.9
+2026-08-13 12:19:50.920402: I external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:454] Loaded cuDNN version 8904
+[dronerf/bitfl] round 001/30: loss=1.3088, acc=0.3653, time=13.0s
+[dronerf/bitfl] round 002/30: loss=1.2729, acc=0.3873, time=11.4s
+[dronerf/bitfl] round 003/30: loss=1.2730, acc=0.3920, time=11.5s
+[dronerf/bitfl] round 004/30: loss=1.2579, acc=0.3924, time=11.4s
+[dronerf/bitfl] round 005/30: loss=1.2038, acc=0.4007, time=11.3s
+[dronerf/bitfl] round 006/30: loss=1.1950, acc=0.4049, time=11.2s
+[dronerf/bitfl] round 007/30: loss=1.2189, acc=0.4020, time=11.1s
+[dronerf/bitfl] round 008/30: loss=1.1836, acc=0.4002, time=11.4s
+[dronerf/bitfl] round 009/30: loss=1.1134, acc=0.4107, time=11.5s
+[dronerf/bitfl] round 010/30: loss=1.0410, acc=0.4602, time=11.3s
+[dronerf/bitfl] round 011/30: loss=1.1860, acc=0.4142, time=11.4s
+[dronerf/bitfl] round 012/30: loss=1.1526, acc=0.4251, time=11.5s
+[dronerf/bitfl] round 013/30: loss=1.3984, acc=0.4489, time=11.3s
+[dronerf/bitfl] round 014/30: loss=1.0114, acc=0.4953, time=11.6s
+[dronerf/bitfl] round 015/30: loss=0.9795, acc=0.5389, time=11.5s
+[dronerf/bitfl] round 016/30: loss=1.1147, acc=0.4907, time=11.3s
+[dronerf/bitfl] round 017/30: loss=1.4011, acc=0.3860, time=11.4s
+[dronerf/bitfl] round 018/30: loss=1.1529, acc=0.5204, time=11.6s
+[dronerf/bitfl] round 019/30: loss=1.6363, acc=0.3453, time=11.4s
+[dronerf/bitfl] round 020/30: loss=1.4108, acc=0.3471, time=11.4s
+[dronerf/bitfl] round 021/30: loss=1.2141, acc=0.4976, time=11.2s
+[dronerf/bitfl] round 022/30: loss=1.7863, acc=0.4798, time=11.3s
+[dronerf/bitfl] round 023/30: loss=1.1343, acc=0.5167, time=11.5s
+[dronerf/bitfl] round 024/30: loss=1.0265, acc=0.4920, time=11.2s
+[dronerf/bitfl] round 025/30: loss=1.3869, acc=0.2856, time=11.4s
+[dronerf/bitfl] round 026/30: loss=3.3538, acc=0.1318, time=11.7s
+[dronerf/bitfl] round 027/30: loss=2.8537, acc=0.1193, time=11.7s
+[dronerf/bitfl] round 028/30: loss=3.6994, acc=0.1102, time=11.4s
+[dronerf/bitfl] round 029/30: loss=1.0506, acc=0.5420, time=11.4s
+[dronerf/bitfl] round 030/30: loss=0.8779, acc=0.5967, time=11.1s
+completed: results/tuning_pilot/dronerf/bitfl/seed_42_20260813_121953

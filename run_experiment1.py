@@ -29,6 +29,19 @@ def parse_args():
     parser.add_argument("--model-profile", choices=MODEL_PROFILES, default="standard")
     parser.add_argument("--bitfl-normalization-bound", type=float, default=1.0)
     parser.add_argument("--bitfl-topk-fraction", type=float, default=0.5)
+    parser.add_argument("--bitfl-bit-flip-probability", type=float, default=0.0)
+    parser.add_argument(
+        "--bitfl-disable-error-feedback",
+        dest="bitfl_error_feedback",
+        action="store_false",
+        help="discard the unselected BitFL top-k residual instead of carrying it across rounds",
+    )
+    parser.set_defaults(bitfl_error_feedback=True)
+    parser.add_argument(
+        "--cqfl-uplink-error-feedback",
+        action="store_true",
+        help="carry each client's 2-bit uplink quantization residual into the next round",
+    )
     return parser.parse_args()
 
 
@@ -53,6 +66,9 @@ def main():
             model_profile=args.model_profile,
             bitfl_normalization_bound=args.bitfl_normalization_bound,
             bitfl_topk_fraction=args.bitfl_topk_fraction,
+            bitfl_bit_flip_probability=args.bitfl_bit_flip_probability,
+            bitfl_error_feedback=args.bitfl_error_feedback,
+            cqfl_uplink_error_feedback=args.cqfl_uplink_error_feedback,
         )
         output = run(config)
         print(f"completed: {output}")

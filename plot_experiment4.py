@@ -11,13 +11,17 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from BitFLCommunication import PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION
+from BitFLCommunication import (
+    LEGACY_PROTOCOL_VERSION as BITFL_LEGACY_PROTOCOL_VERSION,
+    PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION,
+)
 from cqfl.config import METHOD_NAMES
 from plot_experiment1 import (
     LABELS,
@@ -101,6 +105,15 @@ def _read_cumulative_uplink(metrics_path: Path, method: str) -> np.ndarray:
                 )
 
     if method == "bitfl":
+        config_path = metrics_path.with_name("config.json")
+        with config_path.open("r", encoding="utf-8") as handle:
+            bitfl_config = json.load(handle)
+        allowed_protocols = {BITFL_PROTOCOL_VERSION}
+        if (
+            "bitfl_bit_flip_probability" not in bitfl_config
+            and "bitfl_error_feedback" not in bitfl_config
+        ):
+            allowed_protocols.add(BITFL_LEGACY_PROTOCOL_VERSION)
         required = {
             "uplink_trainable_bytes",
             "uplink_bitfl_1bit_bytes",
@@ -122,7 +135,7 @@ def _read_cumulative_uplink(metrics_path: Path, method: str) -> np.ndarray:
                 raise ValueError(
                     f"invalid BitFL byte split in {metrics_path}, row {row_index}"
                 ) from error
-            if row["uplink_protocol"] != BITFL_PROTOCOL_VERSION:
+            if row["uplink_protocol"] not in allowed_protocols:
                 raise ValueError(
                     f"unsupported BitFL protocol in {metrics_path}, row {row_index}"
                 )

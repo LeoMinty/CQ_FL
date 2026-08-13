@@ -1,10 +1,10 @@
 """Simplified BitFL uplink codec from Li et al., Computer Networks 2026.
 
-This implements the non-private BitFL efficiency baseline: tensor updates are
+This implements the BitFL efficiency baseline: tensor updates are
 normalized to [-normalization_bound, normalization_bound], stochastically encoded to
 one unbiased bit per scalar, physically packed, and decoded before aggregation.
-HLDP perturbation is deliberately disabled so privacy noise is not confounded
-with the communication-method comparison.
+Optional independent bit flips provide the paper's simplified HLDP perturbation
+for sensitivity experiments; the default remains the non-private baseline.
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ from typing import Sequence, Tuple
 import numpy as np
 
 
-PROTOCOL_VERSION = "bitfl_v1_stochastic_1bit_tensor_fp32_scale_topk50_ef"
+LEGACY_PROTOCOL_VERSION = "bitfl_v1_stochastic_1bit_tensor_fp32_scale_topk50_ef"
+PROTOCOL_VERSION = (
+    "bitfl_v2_stochastic_1bit_tensor_fp32_scale_configurable_hldp_topk_ef"
+)
 
 
 def pack_one_bit(bits: np.ndarray) -> np.ndarray:
@@ -53,6 +56,7 @@ def encode_update(
     values: np.ndarray,
     rng: np.random.Generator,
     normalization_bound: float = 1.0,
+    bit_flip_probability: float = 0.0,
 ) -> PackedBitFLTensor:
     """Apply Eq. (5) stochastic one-bit quantization to one tensor update."""
     values = np.asarray(values, dtype=np.float32)
@@ -60,6 +64,8 @@ def encode_update(
         raise ValueError("BitFL updates must contain only finite values")
     if not 0.0 < normalization_bound <= 1.0:
         raise ValueError("normalization_bound must lie in (0, 1]")
+    if not 0.0 <= bit_flip_probability <= 0.5:
+        raise ValueError("bit_flip_probability must lie in [0, 0.5]")
     flat = values.reshape(-1)
     maximum = float(np.max(np.abs(flat))) if flat.size else 0.0
     if maximum == 0.0:
@@ -72,6 +78,9 @@ def encode_update(
         probability_positive = (normalized + np.float32(1.0)) * np.float32(0.5)
         bits = (rng.random(flat.size) < probability_positive).astype(np.uint8)
         scale = np.float32(maximum / normalization_bound)
+    if bit_flip_probability > 0.0 and bits.size:
+        flips = rng.random(bits.size) < bit_flip_probability
+        bits = np.bitwise_xor(bits, flips.astype(np.uint8))
     return PackedBitFLTensor(
         packed=pack_one_bit(bits),
         scale=scale,
@@ -93,8 +102,11 @@ def quantize_update_np(
     values: np.ndarray,
     rng: np.random.Generator,
     normalization_bound: float = 1.0,
+    bit_flip_probability: float = 0.0,
 ):
-    message = encode_update(values, rng, normalization_bound)
+    message = encode_update(
+        values, rng, normalization_bound, bit_flip_probability
+    )
     return decode_update(message), message.nbytes
 
 

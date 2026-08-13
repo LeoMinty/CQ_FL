@@ -1,0 +1,6 @@
+dataset,method,seeds,rounds,final_cumulative_uplink_bytes_mean,final_cumulative_uplink_bytes_std,uplink_compression_vs_fedavg,final_accuracy_mean,final_accuracy_std,target_accuracy,seeds_reaching_target,mean_uplink_bytes_to_target,std_uplink_bytes_to_target
+dronerf,fedavg_fp32,"42,123,2024",100,268168000.0,0.0,1.0,0.6142962962962962,0.0038802372899878006,,0,,
+dronerf,bitfl,"42,123,2024",100,8598500.0,0.0,31.18776530790254,0.5701481481481482,0.01749058143566059,,0,,
+dronerf,signsgd,"42,123,2024",100,8598500.0,0.0,31.18776530790254,0.4683703703703704,0.005522370020626898,,0,,
+dronerf,w2_fp32_adam,"42,123,2024",100,268168000.0,0.0,1.0,0.586962962962963,0.011084907372989828,,0,,
+dronerf,cqfl,"42,123,2024",100,16816500.0,0.0,15.946718996223947,0.5718518518518518,0.010315729063811747,,0,,

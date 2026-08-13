@@ -1,0 +1,54 @@
+{
+  "config": {
+    "dataset": "dronerf",
+    "method": "bitfl",
+    "data_path": "dronerf_processed/dronerf_drf2_complex.npz",
+    "output_root": "results/bitfl_hldp05_noef_pilot",
+    "batch_size": 256,
+    "learning_rate": 5e-05,
+    "block_size": 64,
+    "seed": 42,
+    "clients": 5,
+    "rounds": 50,
+    "local_epochs": 2,
+    "max_train_samples": 0,
+    "max_test_samples": 0,
+    "model_profile": "dronerf_small",
+    "bitfl_normalization_bound": 0.5,
+    "bitfl_topk_fraction": 0.1,
+    "bitfl_bit_flip_probability": 0.1,
+    "bitfl_error_feedback": false
+  },
+  "implementation": {
+    "core": "BitMyConv_noMul.ComplexConv2D",
+    "weight_quantizer": "original unit {+1,+i,-1,-i}",
+    "federated_update": "FedAvg client delta",
+    "uplink_protocol_version": "bitfl_v2_stochastic_1bit_tensor_fp32_scale_configurable_hldp_topk_ef",
+    "complex_uplink": "not used by this method",
+    "real_uplink": "not used by this method",
+    "non_trainable_uplink": "FP32",
+    "optimizer": "bitfl",
+    "bitfl_baseline": {
+      "privacy_perturbation": "independent post-quantization bit flip",
+      "bit_flip_probability": 0.1,
+      "stochastic_quantization": "Eq. (5), physically packed 1-bit",
+      "normalization_bound": 0.5,
+      "paper_compression_rate_0_8": "not used; paper does not define it reproducibly",
+      "topk_fraction": 0.1,
+      "error_feedback": "disabled; unselected top-k residual is discarded"
+    }
+  },
+  "best_test_accuracy": 0.5068888888888889,
+  "final_test_accuracy": 0.5044444444444445,
+  "parameter_count": 134084,
+  "notes": [
+    "All five methods use one complex architecture and parameter layout.",
+    "BitFL uses FP32 local Adam, stochastic packed 1-bit uplink, top-k=0.1, bit-flip=0.1, and error-feedback=False.",
+    "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
+    "CA-4bit preserves component-wise Adam second-moment equations.",
+    "The legacy demos upload FP32 masters; Bit2Communication supplies the missing packed federated codec.",
+    "CQ-FL uploads every trainable FedAvg client delta at 2-bit; complex and real tensors use separate decoders.",
+    "BatchNorm moving statistics and other non-trainable client state remain FP32.",
+    "Logical low-bit payloads are packed; TensorFlow compute shadows remain FP32."
+  ]
+}

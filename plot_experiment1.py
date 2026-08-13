@@ -12,13 +12,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from Bit2Communication import PROTOCOL_VERSION
-from BitFLCommunication import PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION
+from BitFLCommunication import (
+    LEGACY_PROTOCOL_VERSION as BITFL_LEGACY_PROTOCOL_VERSION,
+    PROTOCOL_VERSION as BITFL_PROTOCOL_VERSION,
+)
 from cqfl.config import METHOD_NAMES
 
 
 LABELS = {
     "fedavg_fp32": "FedAvg (FP32)",
-    "bitfl": "BitFL (1-bit + top-k EF)",
+    "bitfl": "BitFL (1-bit)",
     "signsgd": "SignSGD",
     "w2_fp32_adam": "2-bit W + FP32 Adam",
     "cqfl": "CQ-FL",
@@ -37,7 +40,6 @@ COMPARABLE_CONFIG_FIELDS = (
     "rounds",
     "local_epochs",
     "batch_size",
-    "learning_rate",
     "block_size",
     "max_train_samples",
     "max_test_samples",
@@ -45,15 +47,25 @@ COMPARABLE_CONFIG_FIELDS = (
 )
 
 METHOD_SPECIFIC_CONFIG_FIELDS = {
+    "fedavg_fp32": ("learning_rate",),
     "bitfl": (
+        "learning_rate",
         "bitfl_normalization_bound",
         "bitfl_topk_fraction",
+        "bitfl_bit_flip_probability",
+        "bitfl_error_feedback",
     ),
+    "signsgd": ("learning_rate",),
+    "w2_fp32_adam": ("learning_rate",),
+    "cqfl": ("learning_rate", "cqfl_uplink_error_feedback"),
 }
 
 COMPARABLE_CONFIG_DEFAULTS = {
     "bitfl_normalization_bound": 1.0,
     "bitfl_topk_fraction": 0.5,
+    "bitfl_bit_flip_probability": 0.0,
+    "bitfl_error_feedback": True,
+    "cqfl_uplink_error_feedback": False,
 }
 
 
@@ -110,10 +122,16 @@ def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
             )
     if config.get("method") == "bitfl":
         protocols = {row["uplink_protocol"] for row in rows}
-        if protocols != {BITFL_PROTOCOL_VERSION}:
+        allowed_protocols = {BITFL_PROTOCOL_VERSION}
+        if (
+            "bitfl_bit_flip_probability" not in config
+            and "bitfl_error_feedback" not in config
+        ):
+            allowed_protocols.add(BITFL_LEGACY_PROTOCOL_VERSION)
+        if len(protocols) != 1 or not protocols.issubset(allowed_protocols):
             raise ValueError(
                 f"unsupported BitFL uplink protocol in {metrics_path}: "
-                f"{sorted(protocols)!r}; expected {BITFL_PROTOCOL_VERSION!r}"
+                f"{sorted(protocols)!r}; expected one of {sorted(allowed_protocols)!r}"
             )
 
     recorded_rounds = [int(row["round"]) for row in rows]

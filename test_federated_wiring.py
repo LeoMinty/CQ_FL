@@ -67,6 +67,21 @@ class FederatedWiringTests(unittest.TestCase):
             self.assertEqual(payload, real_delta.nbytes)
             self.assertEqual(kind, "fp32")
 
+    def test_cqfl_uplink_error_feedback_conserves_update(self):
+        from cqfl.federated import _quantized_upload
+
+        raw = np.array([0.7, -0.2, 0.0, 1.3], dtype=np.float32)
+        previous_residual = np.array([0.1, 0.05, -0.03, 0.2], dtype=np.float32)
+        corrected = raw + previous_residual
+        reconstructed, _payload, kind = _quantized_upload(
+            corrected, "cqfl", False
+        )
+        next_residual = corrected - reconstructed
+        np.testing.assert_allclose(
+            reconstructed + next_residual, corrected, atol=1e-7, rtol=0.0
+        )
+        self.assertEqual(kind, "real_2bit")
+
     def test_binary_dense_head_is_not_misclassified_as_complex(self):
         from cqfl.config import ExperimentConfig
         from cqfl.federated import BitFLOffloadTrainer, _bitfl_variable_masks
@@ -113,6 +128,29 @@ class FederatedWiringTests(unittest.TestCase):
         config = ExperimentConfig(dataset="ravdess", method="bitfl")
         trainer = BitFLOffloadTrainer(model, "bitfl", config)
         self.assertIsInstance(trainer.optimizer, tf.keras.optimizers.Adam)
+
+    def test_dronerf_small_is_shared_and_smaller(self):
+        from cqfl.models import build_model
+
+        input_shape = (64, 32, 1, 2)
+        standard = build_model(input_shape, 4, "fedavg_fp32", "standard")
+        small_counts = []
+        small_shapes = []
+        for method in (
+            "fedavg_fp32",
+            "bitfl",
+            "signsgd",
+            "w2_fp32_adam",
+            "cqfl",
+        ):
+            model = build_model(input_shape, 4, method, "dronerf_small")
+            model(tf.zeros((1, *input_shape), dtype=tf.float32), training=False)
+            small_counts.append(model.count_params())
+            small_shapes.append([tuple(variable.shape) for variable in model.weights])
+        standard(tf.zeros((1, *input_shape), dtype=tf.float32), training=False)
+        self.assertTrue(all(count == small_counts[0] for count in small_counts))
+        self.assertTrue(all(shapes == small_shapes[0] for shapes in small_shapes))
+        self.assertLess(small_counts[0], standard.count_params())
 
 
 if __name__ == "__main__":

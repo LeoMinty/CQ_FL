@@ -1,0 +1,20 @@
+{
+  "dataset": "dronerf",
+  "method": "bitfl",
+  "data_path": "dronerf_processed/dronerf_drf2_complex.npz",
+  "output_root": "results/bitfl_hldp05_noef_pilot",
+  "batch_size": 256,
+  "learning_rate": 0.0001,
+  "block_size": 64,
+  "seed": 42,
+  "clients": 5,
+  "rounds": 50,
+  "local_epochs": 2,
+  "max_train_samples": 0,
+  "max_test_samples": 0,
+  "model_profile": "dronerf_small",
+  "bitfl_normalization_bound": 1.0,
+  "bitfl_topk_fraction": 0.1,
+  "bitfl_bit_flip_probability": 0.05,
+  "bitfl_error_feedback": false
+}

@@ -71,6 +71,9 @@ class ExperimentConfig:
     model_profile: str = "standard"
     bitfl_normalization_bound: float = 1.0
     bitfl_topk_fraction: float = 0.5
+    bitfl_bit_flip_probability: float = 0.0
+    bitfl_error_feedback: bool = True
+    cqfl_uplink_error_feedback: bool = False
 
     def resolved(self) -> "ExperimentConfig":
         if self.dataset not in DATASET_CONFIGS:
@@ -87,6 +90,8 @@ class ExperimentConfig:
             raise ValueError("bitfl_normalization_bound must lie in (0, 1]")
         if not 0.0 < self.bitfl_topk_fraction <= 1.0:
             raise ValueError("bitfl_topk_fraction must lie in (0, 1]")
+        if not 0.0 <= self.bitfl_bit_flip_probability <= 0.5:
+            raise ValueError("bitfl_bit_flip_probability must lie in [0, 0.5]")
         ds = DATASET_CONFIGS[self.dataset]
         self.clients = self.clients or ds.clients
         self.rounds = self.rounds or ds.rounds

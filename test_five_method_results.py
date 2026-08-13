@@ -30,6 +30,9 @@ class FiveMethodResultTests(unittest.TestCase):
             "model_profile": "standard",
             "bitfl_normalization_bound": 1.0,
             "bitfl_topk_fraction": 0.5,
+            "bitfl_bit_flip_probability": 0.0,
+            "bitfl_error_feedback": True,
+            "cqfl_uplink_error_feedback": False,
         }
         (run / "config.json").write_text(json.dumps(config), encoding="utf-8")
         fields = [

@@ -97,6 +97,7 @@ def _quantized_upload(
     is_complex: bool,
     rng: np.random.Generator = None,
     bitfl_normalization_bound: float = 1.0,
+    bitfl_bit_flip_probability: float = 0.0,
 ):
     """Encode the message that is actually reconstructed by the server.
 
@@ -112,7 +113,10 @@ def _quantized_upload(
         if rng is None:
             raise ValueError("BitFL stochastic quantization requires an explicit RNG")
         reconstructed, payload = quantize_bitfl_update_np(
-            delta, rng, bitfl_normalization_bound
+            delta,
+            rng,
+            bitfl_normalization_bound,
+            bitfl_bit_flip_probability,
         )
         return reconstructed, payload, "bitfl_1bit"
     if method == "cqfl":
@@ -389,6 +393,10 @@ def run(config: ExperimentConfig) -> Path:
     ]
     history = []
     bitfl_error = [np.zeros_like(value) for value in global_trainable]
+    cqfl_uplink_error = [
+        [np.zeros_like(value) for value in global_trainable]
+        for _ in range(config.clients)
+    ]
     with (output / "metrics.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
@@ -425,18 +433,29 @@ def run(config: ExperimentConfig) -> Path:
                 bitfl_rng = np.random.default_rng(
                     config.seed + round_index * 1_000_003 + client_id * 10_007
                 )
-                for local, base, is_complex in zip(
+                for tensor_index, (local, base, is_complex) in enumerate(zip(
                     local_trainable,
                     broadcast_trainable,
                     bitfl_complex_mask,
-                ):
+                )):
+                    raw_delta = local - base
+                    upload_delta = raw_delta
+                    if config.method == "cqfl" and config.cqfl_uplink_error_feedback:
+                        upload_delta = (
+                            raw_delta + cqfl_uplink_error[client_id][tensor_index]
+                        )
                     reconstructed, payload, encoding = _quantized_upload(
-                        local - base,
+                        upload_delta,
                         config.method,
                         is_complex,
                         rng=bitfl_rng,
                         bitfl_normalization_bound=config.bitfl_normalization_bound,
+                        bitfl_bit_flip_probability=config.bitfl_bit_flip_probability,
                     )
+                    if config.method == "cqfl" and config.cqfl_uplink_error_feedback:
+                        cqfl_uplink_error[client_id][tensor_index] = (
+                            upload_delta - reconstructed
+                        ).astype(np.float32, copy=False)
                     encoded_trainable.append(reconstructed)
                     uplink_bytes += payload
                     uplink_trainable_bytes += payload
@@ -461,10 +480,20 @@ def run(config: ExperimentConfig) -> Path:
                 for index in range(len(broadcast_trainable))
             ]
             if config.method == "bitfl":
-                aggregated_trainable, bitfl_error = bitfl_topk_error_feedback(
+                residual = (
+                    bitfl_error
+                    if config.bitfl_error_feedback
+                    else [np.zeros_like(value) for value in aggregated_trainable]
+                )
+                aggregated_trainable, next_bitfl_error = bitfl_topk_error_feedback(
                     aggregated_trainable,
-                    bitfl_error,
+                    residual,
                     config.bitfl_topk_fraction,
+                )
+                bitfl_error = (
+                    next_bitfl_error
+                    if config.bitfl_error_feedback
+                    else [np.zeros_like(value) for value in aggregated_trainable]
                 )
             global_trainable = [
                 base + update
@@ -542,14 +571,28 @@ def run(config: ExperimentConfig) -> Path:
             ),
             "non_trainable_uplink": "FP32",
             "optimizer": "CA4BitAdam" if config.method == "cqfl" else config.method,
+            "cqfl_uplink_error_feedback": (
+                "per-client residual across communication rounds"
+                if config.method == "cqfl" and config.cqfl_uplink_error_feedback
+                else "disabled"
+            ),
             "bitfl_baseline": (
                 {
-                    "privacy_perturbation": "disabled (BitFL without DP)",
+                    "privacy_perturbation": (
+                        "disabled (BitFL without DP)"
+                        if config.bitfl_bit_flip_probability == 0.0
+                        else "independent post-quantization bit flip"
+                    ),
+                    "bit_flip_probability": config.bitfl_bit_flip_probability,
                     "stochastic_quantization": "Eq. (5), physically packed 1-bit",
                     "normalization_bound": config.bitfl_normalization_bound,
                     "paper_compression_rate_0_8": "not used; paper does not define it reproducibly",
                     "topk_fraction": config.bitfl_topk_fraction,
-                    "error_feedback": "server residual across communication rounds",
+                    "error_feedback": (
+                        "server residual across communication rounds"
+                        if config.bitfl_error_feedback
+                        else "disabled; unselected top-k residual is discarded"
+                    ),
                 }
                 if config.method == "bitfl"
                 else "not used by this method"
@@ -560,7 +603,14 @@ def run(config: ExperimentConfig) -> Path:
         "parameter_count": int(global_model.count_params()),
         "notes": [
             "All five methods use one complex architecture and parameter layout.",
-            "The simplified BitFL baseline uses FP32 local Adam, stochastic packed 1-bit uplink, and server top-k 50% error feedback without HLDP noise.",
+            (
+                "BitFL uses FP32 local Adam, stochastic packed 1-bit uplink, "
+                f"top-k={config.bitfl_topk_fraction:g}, "
+                f"bit-flip={config.bitfl_bit_flip_probability:g}, and "
+                f"error-feedback={config.bitfl_error_feedback}."
+                if config.method == "bitfl"
+                else "BitFL-only controls are not used by this method."
+            ),
             "2-bit W and CQ-FL share the original BitFL no-multiply forward operator.",
             "CA-4bit preserves component-wise Adam second-moment equations.",
             "The legacy demos upload FP32 masters; Bit2Communication supplies the missing packed federated codec.",

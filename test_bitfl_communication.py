@@ -31,6 +31,17 @@ class BitFLPackingTests(unittest.TestCase):
         message = encode_update(values, np.random.default_rng(9), 1.0)
         np.testing.assert_array_equal(decode_update(message), values)
 
+    def test_bit_flip_changes_message_without_changing_payload_size(self):
+        values = np.linspace(-1.0, 1.0, 17, dtype=np.float32)
+        clean = encode_update(values, np.random.default_rng(8), 1.0, 0.0)
+        noisy = encode_update(values, np.random.default_rng(8), 1.0, 0.5)
+        self.assertEqual(clean.nbytes, noisy.nbytes)
+        self.assertFalse(np.array_equal(clean.packed, noisy.packed))
+
+    def test_invalid_bit_flip_probability_is_rejected(self):
+        with self.assertRaises(ValueError):
+            encode_update(np.ones(2, np.float32), np.random.default_rng(1), 1.0, 0.6)
+
 
 class BitFLAlgorithmTests(unittest.TestCase):
     def test_stochastic_codec_is_unbiased_in_expectation(self):
