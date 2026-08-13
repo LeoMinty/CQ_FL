@@ -1,0 +1,101 @@
+[dronerf/cqfl] round 001/100: loss=1.2830, acc=0.4302, time=30.0s
+[dronerf/cqfl] round 002/100: loss=1.0298, acc=0.4840, time=28.5s
+[dronerf/cqfl] round 003/100: loss=1.0157, acc=0.4936, time=28.1s
+[dronerf/cqfl] round 004/100: loss=0.9806, acc=0.5049, time=28.2s
+[dronerf/cqfl] round 005/100: loss=0.9687, acc=0.4973, time=27.7s
+[dronerf/cqfl] round 006/100: loss=0.9600, acc=0.4847, time=27.9s
+[dronerf/cqfl] round 007/100: loss=0.9446, acc=0.5051, time=27.7s
+[dronerf/cqfl] round 008/100: loss=0.9217, acc=0.5222, time=28.1s
+[dronerf/cqfl] round 009/100: loss=0.9096, acc=0.5362, time=30.1s
+[dronerf/cqfl] round 010/100: loss=0.8922, acc=0.5540, time=28.3s
+[dronerf/cqfl] round 011/100: loss=0.8846, acc=0.5651, time=28.4s
+[dronerf/cqfl] round 012/100: loss=0.8630, acc=0.5716, time=29.1s
+[dronerf/cqfl] round 013/100: loss=0.8545, acc=0.5720, time=27.9s
+[dronerf/cqfl] round 014/100: loss=0.8563, acc=0.5680, time=29.1s
+[dronerf/cqfl] round 015/100: loss=0.8411, acc=0.5858, time=28.0s
+[dronerf/cqfl] round 016/100: loss=0.8338, acc=0.5902, time=27.4s
+[dronerf/cqfl] round 017/100: loss=0.8333, acc=0.5873, time=28.8s
+[dronerf/cqfl] round 018/100: loss=0.8333, acc=0.5873, time=29.1s
+[dronerf/cqfl] round 019/100: loss=0.8333, acc=0.5873, time=27.4s
+[dronerf/cqfl] round 020/100: loss=0.8261, acc=0.5956, time=27.8s
+[dronerf/cqfl] round 021/100: loss=0.8323, acc=0.5929, time=27.4s
+[dronerf/cqfl] round 022/100: loss=0.8351, acc=0.6002, time=27.6s
+[dronerf/cqfl] round 023/100: loss=0.8300, acc=0.6002, time=27.6s
+[dronerf/cqfl] round 024/100: loss=0.8339, acc=0.5978, time=27.9s
+[dronerf/cqfl] round 025/100: loss=0.8357, acc=0.6029, time=27.4s
+[dronerf/cqfl] round 026/100: loss=0.8357, acc=0.6029, time=28.2s
+[dronerf/cqfl] round 027/100: loss=0.8335, acc=0.6027, time=28.2s
+[dronerf/cqfl] round 028/100: loss=0.8374, acc=0.6033, time=27.6s
+[dronerf/cqfl] round 029/100: loss=0.8434, acc=0.6018, time=27.4s
+[dronerf/cqfl] round 030/100: loss=0.8434, acc=0.6018, time=27.4s
+[dronerf/cqfl] round 031/100: loss=0.8380, acc=0.6031, time=27.6s
+[dronerf/cqfl] round 032/100: loss=0.8451, acc=0.6020, time=28.4s
+[dronerf/cqfl] round 033/100: loss=0.8451, acc=0.6020, time=30.1s
+[dronerf/cqfl] round 034/100: loss=0.8451, acc=0.6020, time=28.9s
+[dronerf/cqfl] round 035/100: loss=0.8451, acc=0.6020, time=28.4s
+[dronerf/cqfl] round 036/100: loss=0.8451, acc=0.6020, time=28.4s
+[dronerf/cqfl] round 037/100: loss=0.8375, acc=0.5987, time=27.9s
+[dronerf/cqfl] round 038/100: loss=0.8429, acc=0.6044, time=30.1s
+[dronerf/cqfl] round 039/100: loss=0.8486, acc=0.6042, time=27.7s
+[dronerf/cqfl] round 040/100: loss=0.8465, acc=0.6002, time=28.3s
+[dronerf/cqfl] round 041/100: loss=0.8465, acc=0.6002, time=27.3s
+[dronerf/cqfl] round 042/100: loss=0.8594, acc=0.6058, time=27.5s
+[dronerf/cqfl] round 043/100: loss=0.8611, acc=0.6018, time=27.7s
+[dronerf/cqfl] round 044/100: loss=0.8675, acc=0.5993, time=27.6s
+[dronerf/cqfl] round 045/100: loss=0.8678, acc=0.6033, time=27.3s
+[dronerf/cqfl] round 046/100: loss=0.8678, acc=0.6033, time=27.5s
+[dronerf/cqfl] round 047/100: loss=0.8678, acc=0.6033, time=28.1s
+[dronerf/cqfl] round 048/100: loss=0.8678, acc=0.6033, time=27.5s
+[dronerf/cqfl] round 049/100: loss=0.8678, acc=0.6033, time=27.4s
+[dronerf/cqfl] round 050/100: loss=0.8678, acc=0.6033, time=28.0s
+[dronerf/cqfl] round 051/100: loss=0.8628, acc=0.6058, time=27.7s
+[dronerf/cqfl] round 052/100: loss=0.8633, acc=0.5940, time=27.7s
+[dronerf/cqfl] round 053/100: loss=0.8774, acc=0.5996, time=27.7s
+[dronerf/cqfl] round 054/100: loss=0.8774, acc=0.5996, time=28.2s
+[dronerf/cqfl] round 055/100: loss=0.8724, acc=0.6016, time=28.0s
+[dronerf/cqfl] round 056/100: loss=0.8724, acc=0.6016, time=27.8s
+[dronerf/cqfl] round 057/100: loss=0.8703, acc=0.5978, time=30.2s
+[dronerf/cqfl] round 058/100: loss=0.8747, acc=0.5996, time=28.6s
+[dronerf/cqfl] round 059/100: loss=0.8748, acc=0.5964, time=27.8s
+[dronerf/cqfl] round 060/100: loss=0.8808, acc=0.6007, time=28.2s
+[dronerf/cqfl] round 061/100: loss=0.8908, acc=0.6004, time=27.7s
+[dronerf/cqfl] round 062/100: loss=0.8857, acc=0.6024, time=29.9s
+[dronerf/cqfl] round 063/100: loss=0.8966, acc=0.5940, time=28.4s
+[dronerf/cqfl] round 064/100: loss=0.8959, acc=0.5942, time=28.6s
+[dronerf/cqfl] round 065/100: loss=0.8959, acc=0.5942, time=29.9s
+[dronerf/cqfl] round 066/100: loss=0.8959, acc=0.5942, time=28.6s
+[dronerf/cqfl] round 067/100: loss=0.8959, acc=0.5942, time=28.4s
+[dronerf/cqfl] round 068/100: loss=0.8959, acc=0.5942, time=27.8s
+[dronerf/cqfl] round 069/100: loss=0.8937, acc=0.5924, time=27.8s
+[dronerf/cqfl] round 070/100: loss=0.9000, acc=0.5884, time=28.7s
+[dronerf/cqfl] round 071/100: loss=0.9072, acc=0.5967, time=28.0s
+[dronerf/cqfl] round 072/100: loss=0.9036, acc=0.5916, time=27.9s
+[dronerf/cqfl] round 073/100: loss=0.9192, acc=0.5976, time=27.7s
+[dronerf/cqfl] round 074/100: loss=0.9192, acc=0.5976, time=28.1s
+[dronerf/cqfl] round 075/100: loss=0.9186, acc=0.5898, time=28.2s
+[dronerf/cqfl] round 076/100: loss=0.9186, acc=0.5898, time=28.0s
+[dronerf/cqfl] round 077/100: loss=0.9186, acc=0.5898, time=28.3s
+[dronerf/cqfl] round 078/100: loss=0.9186, acc=0.5898, time=27.3s
+[dronerf/cqfl] round 079/100: loss=0.9186, acc=0.5898, time=27.4s
+[dronerf/cqfl] round 080/100: loss=0.9186, acc=0.5898, time=28.6s
+[dronerf/cqfl] round 081/100: loss=0.9186, acc=0.5898, time=28.4s
+[dronerf/cqfl] round 082/100: loss=0.9186, acc=0.5898, time=27.2s
+[dronerf/cqfl] round 083/100: loss=0.9186, acc=0.5898, time=27.4s
+[dronerf/cqfl] round 084/100: loss=0.9186, acc=0.5898, time=28.6s
+[dronerf/cqfl] round 085/100: loss=0.9186, acc=0.5898, time=29.8s
+[dronerf/cqfl] round 086/100: loss=0.9186, acc=0.5898, time=27.3s
+[dronerf/cqfl] round 087/100: loss=0.9186, acc=0.5898, time=27.8s
+[dronerf/cqfl] round 088/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 089/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 090/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 091/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 092/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 093/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 094/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 095/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 096/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 097/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 098/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 099/100: early-stopped at train-loss best round 75, acc=0.5898
+[dronerf/cqfl] round 100/100: early-stopped at train-loss best round 75, acc=0.5898
+completed: results/dronerf_cqfl_optimized_final/dronerf/cqfl/seed_42_20260813_180531

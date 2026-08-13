@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import copy
 import json
 import os
 import random
@@ -389,6 +390,10 @@ def run(config: ExperimentConfig) -> Path:
         "uplink_non_trainable_bytes",
         "downlink_bytes",
         "optimizer_state_bytes",
+        "effective_learning_rate",
+        "best_train_loss_round",
+        "restored_best_after_round",
+        "early_stopped",
         "round_seconds",
     ]
     history = []
@@ -397,11 +402,49 @@ def run(config: ExperimentConfig) -> Path:
         [np.zeros_like(value) for value in global_trainable]
         for _ in range(config.clients)
     ]
+    cqfl_best_checkpoint = None
+    cqfl_best_train_loss = float("inf")
+    cqfl_best_round = 0
+    cqfl_rounds_without_improvement = 0
+    cqfl_frozen = False
+    cqfl_frozen_metrics = None
     with (output / "metrics.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for round_index in range(1, config.rounds + 1):
             round_started = time.perf_counter()
+            if config.method == "cqfl" and cqfl_frozen:
+                row = {
+                    "round": round_index,
+                    "train_loss": cqfl_best_train_loss,
+                    "test_loss": cqfl_frozen_metrics["test_loss"],
+                    "test_accuracy": cqfl_frozen_metrics["test_accuracy"],
+                    "uplink_protocol": PROTOCOL_VERSION,
+                    "uplink_bytes": 0,
+                    "uplink_trainable_bytes": 0,
+                    "uplink_complex_2bit_bytes": 0,
+                    "uplink_real_2bit_bytes": 0,
+                    "uplink_bitfl_1bit_bytes": 0,
+                    "uplink_non_trainable_bytes": 0,
+                    "downlink_bytes": 0,
+                    "optimizer_state_bytes": int(
+                        sum(client.optimizer_state_bytes for client in clients)
+                    ),
+                    "effective_learning_rate": float(clients[0].optimizer.learning_rate),
+                    "best_train_loss_round": cqfl_best_round,
+                    "restored_best_after_round": 1,
+                    "early_stopped": 1,
+                    "round_seconds": time.perf_counter() - round_started,
+                }
+                writer.writerow(row)
+                handle.flush()
+                history.append(row)
+                print(
+                    f"[{config.dataset}/{config.method}] round {round_index:03d}/{config.rounds}: "
+                    f"early-stopped at train-loss best round {cqfl_best_round}, "
+                    f"acc={row['test_accuracy']:.4f}"
+                )
+                continue
             broadcast_trainable, trainable_downlink = _quantized_broadcast(
                 global_trainable, config.method, bitfl_kernel_mask
             )
@@ -511,9 +554,82 @@ def run(config: ExperimentConfig) -> Path:
                 bundle.y_test,
                 config.batch_size,
             )
+            mean_train_loss = float(np.mean(losses))
+            if not np.isfinite(mean_train_loss):
+                raise FloatingPointError(
+                    f"non-finite mean client training loss at round {round_index}"
+                )
+            restored_best = False
+            if config.method == "cqfl" and config.cqfl_restore_best:
+                improved = (
+                    mean_train_loss
+                    < cqfl_best_train_loss - config.cqfl_early_stopping_min_delta
+                )
+                if improved:
+                    cqfl_best_train_loss = mean_train_loss
+                    cqfl_best_round = round_index
+                    cqfl_rounds_without_improvement = 0
+                    cqfl_best_checkpoint = {
+                        "global_trainable": [value.copy() for value in global_trainable],
+                        "global_non_trainable": [
+                            value.copy() for value in global_non_trainable
+                        ],
+                        "optimizers": [
+                            client.optimizer.snapshot() for client in clients
+                        ],
+                        "uplink_error": copy.deepcopy(cqfl_uplink_error),
+                        "test_loss": float(test_loss),
+                        "test_accuracy": float(test_accuracy),
+                    }
+                else:
+                    cqfl_rounds_without_improvement += 1
+                    global_trainable = [
+                        value.copy()
+                        for value in cqfl_best_checkpoint["global_trainable"]
+                    ]
+                    global_non_trainable = [
+                        value.copy()
+                        for value in cqfl_best_checkpoint["global_non_trainable"]
+                    ]
+                    for client, optimizer_snapshot in zip(
+                        clients, cqfl_best_checkpoint["optimizers"]
+                    ):
+                        client.optimizer.restore(optimizer_snapshot)
+                    cqfl_uplink_error = copy.deepcopy(
+                        cqfl_best_checkpoint["uplink_error"]
+                    )
+                    restored_best = True
+                    # The persisted global state is the training-loss-selected
+                    # checkpoint, so report that state's held-out metrics for
+                    # this round rather than the rejected candidate's metrics.
+                    test_loss = cqfl_best_checkpoint["test_loss"]
+                    test_accuracy = cqfl_best_checkpoint["test_accuracy"]
+                    if (
+                        config.cqfl_reduce_lr_patience
+                        and cqfl_rounds_without_improvement
+                        % config.cqfl_reduce_lr_patience
+                        == 0
+                    ):
+                        reduced_learning_rate = max(
+                            config.cqfl_min_learning_rate,
+                            float(clients[0].optimizer.learning_rate)
+                            * config.cqfl_reduce_lr_factor,
+                        )
+                        for client in clients:
+                            client.optimizer.learning_rate = reduced_learning_rate
+                    if (
+                        config.cqfl_early_stopping_patience
+                        and cqfl_rounds_without_improvement
+                        >= config.cqfl_early_stopping_patience
+                    ):
+                        cqfl_frozen = True
+                        cqfl_frozen_metrics = {
+                            "test_loss": cqfl_best_checkpoint["test_loss"],
+                            "test_accuracy": cqfl_best_checkpoint["test_accuracy"],
+                        }
             row = {
                 "round": round_index,
-                "train_loss": float(np.mean(losses)),
+                "train_loss": mean_train_loss,
                 "test_loss": test_loss,
                 "test_accuracy": test_accuracy,
                 "uplink_protocol": (
@@ -535,6 +651,16 @@ def run(config: ExperimentConfig) -> Path:
                 "optimizer_state_bytes": int(
                     sum(client.optimizer_state_bytes for client in clients)
                 ),
+                "effective_learning_rate": (
+                    float(clients[0].optimizer.learning_rate)
+                    if config.method == "cqfl"
+                    else config.learning_rate
+                ),
+                "best_train_loss_round": (
+                    cqfl_best_round if config.method == "cqfl" else 0
+                ),
+                "restored_best_after_round": int(restored_best),
+                "early_stopped": 0,
                 "round_seconds": time.perf_counter() - round_started,
             }
             writer.writerow(row)
@@ -576,6 +702,11 @@ def run(config: ExperimentConfig) -> Path:
                 if config.method == "cqfl" and config.cqfl_uplink_error_feedback
                 else "disabled"
             ),
+            "cqfl_checkpoint_selection": (
+                "lowest mean client training loss; test set is report-only"
+                if config.method == "cqfl" and config.cqfl_restore_best
+                else "disabled"
+            ),
             "bitfl_baseline": (
                 {
                     "privacy_perturbation": (
@@ -600,6 +731,8 @@ def run(config: ExperimentConfig) -> Path:
         },
         "best_test_accuracy": max(row["test_accuracy"] for row in history),
         "final_test_accuracy": history[-1]["test_accuracy"],
+        "best_train_loss_round": cqfl_best_round if config.method == "cqfl" else 0,
+        "early_stopped": cqfl_frozen,
         "parameter_count": int(global_model.count_params()),
         "notes": [
             "All five methods use one complex architecture and parameter layout.",

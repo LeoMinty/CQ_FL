@@ -74,6 +74,12 @@ class ExperimentConfig:
     bitfl_bit_flip_probability: float = 0.0
     bitfl_error_feedback: bool = True
     cqfl_uplink_error_feedback: bool = False
+    cqfl_restore_best: bool = False
+    cqfl_reduce_lr_patience: int = 0
+    cqfl_reduce_lr_factor: float = 0.5
+    cqfl_min_learning_rate: float = 1e-5
+    cqfl_early_stopping_patience: int = 0
+    cqfl_early_stopping_min_delta: float = 0.0
 
     def resolved(self) -> "ExperimentConfig":
         if self.dataset not in DATASET_CONFIGS:
@@ -92,6 +98,21 @@ class ExperimentConfig:
             raise ValueError("bitfl_topk_fraction must lie in (0, 1]")
         if not 0.0 <= self.bitfl_bit_flip_probability <= 0.5:
             raise ValueError("bitfl_bit_flip_probability must lie in [0, 0.5]")
+        if self.cqfl_reduce_lr_patience < 0:
+            raise ValueError("cqfl_reduce_lr_patience must be non-negative")
+        if not 0.0 < self.cqfl_reduce_lr_factor < 1.0:
+            raise ValueError("cqfl_reduce_lr_factor must lie in (0, 1)")
+        if self.cqfl_min_learning_rate <= 0.0:
+            raise ValueError("cqfl_min_learning_rate must be positive")
+        if self.cqfl_early_stopping_patience < 0:
+            raise ValueError("cqfl_early_stopping_patience must be non-negative")
+        if self.cqfl_early_stopping_min_delta < 0.0:
+            raise ValueError("cqfl_early_stopping_min_delta must be non-negative")
+        if (
+            self.cqfl_early_stopping_patience
+            and not self.cqfl_restore_best
+        ):
+            raise ValueError("CQ-FL early stopping requires cqfl_restore_best")
         ds = DATASET_CONFIGS[self.dataset]
         self.clients = self.clients or ds.clients
         self.rounds = self.rounds or ds.rounds

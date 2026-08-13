@@ -88,6 +88,23 @@ def _read_cumulative_uplink(metrics_path: Path, method: str) -> np.ndarray:
                 raise ValueError(
                     f"invalid CQ-FL uplink split in {metrics_path}, row {row_index}"
                 ) from error
+            frozen = row.get("early_stopped", "0") == "1"
+            if frozen:
+                if any(
+                    value != 0
+                    for value in (
+                        total,
+                        trainable,
+                        complex_bytes,
+                        real_bytes,
+                        non_trainable,
+                    )
+                ):
+                    raise ValueError(
+                        f"early-stopped CQ-FL row has nonzero uplink in "
+                        f"{metrics_path}, row {row_index}"
+                    )
+                continue
             if trainable != complex_bytes + real_bytes:
                 raise ValueError(
                     f"CQ-FL trainable byte split does not add up in "
@@ -164,10 +181,18 @@ def _collect_communication(
     dataset: str,
     method: str,
     seeds: Iterable[int],
+    max_rounds: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, List[dict], List[Path]]:
-    accuracy, configs, paths = collect(root, dataset, method, seeds)
+    accuracy, configs, paths = collect(
+        root, dataset, method, seeds, max_rounds
+    )
     cumulative = np.stack(
-        [_read_cumulative_uplink(path, method) for path in paths]
+        [
+            _read_cumulative_uplink(path, method)[
+                : max_rounds if max_rounds else None
+            ]
+            for path in paths
+        ]
     )
     if cumulative.shape != accuracy.shape:
         raise ValueError(
@@ -277,6 +302,12 @@ def main() -> None:
         "--results-root", type=Path, default=Path("results/experiment1")
     )
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 2024])
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=0,
+        help="plot only rounds 1..N and allow source runs configured for more rounds",
+    )
     parser.add_argument("--unit", choices=UNIT_DIVISORS, default="mib")
     parser.add_argument("--xscale", choices=["linear", "log"], default="linear")
     parser.add_argument("--target-accuracy", type=float, default=None)
@@ -286,6 +317,8 @@ def main() -> None:
 
     if len(args.seeds) != len(set(args.seeds)):
         raise ValueError(f"--seeds contains duplicates: {args.seeds}")
+    if args.max_rounds < 0:
+        raise ValueError("--max-rounds must be non-negative")
     if args.target_accuracy is not None and not 0.0 <= args.target_accuracy <= 1.0:
         raise ValueError("--target-accuracy must lie in [0, 1]")
 
@@ -303,7 +336,11 @@ def main() -> None:
     reference_path = None
     for method in METHOD_NAMES:
         accuracy, cumulative, configs, paths = _collect_communication(
-            args.results_root, args.dataset, method, args.seeds
+            args.results_root,
+            args.dataset,
+            method,
+            args.seeds,
+            args.max_rounds,
         )
         accuracy_by_method[method] = accuracy
         cumulative_by_method[method] = cumulative
@@ -311,8 +348,12 @@ def main() -> None:
             if reference_config is None:
                 reference_config, reference_path = config, path
                 continue
-            if _config_signature(config) != _config_signature(reference_config):
-                difference = _describe_config_difference(reference_config, config)
+            if _config_signature(config, args.max_rounds) != _config_signature(
+                reference_config, args.max_rounds
+            ):
+                difference = _describe_config_difference(
+                    reference_config, config, args.max_rounds
+                )
                 raise ValueError(
                     f"incomparable configurations: {reference_path} vs "
                     f"{path}: {difference}"

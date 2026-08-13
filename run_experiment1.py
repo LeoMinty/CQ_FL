@@ -42,6 +42,12 @@ def parse_args():
         action="store_true",
         help="carry each client's 2-bit uplink quantization residual into the next round",
     )
+    parser.add_argument("--cqfl-restore-best", action="store_true")
+    parser.add_argument("--cqfl-reduce-lr-patience", type=int, default=0)
+    parser.add_argument("--cqfl-reduce-lr-factor", type=float, default=0.5)
+    parser.add_argument("--cqfl-min-learning-rate", type=float, default=1e-5)
+    parser.add_argument("--cqfl-early-stopping-patience", type=int, default=0)
+    parser.add_argument("--cqfl-early-stopping-min-delta", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -69,6 +75,12 @@ def main():
             bitfl_bit_flip_probability=args.bitfl_bit_flip_probability,
             bitfl_error_feedback=args.bitfl_error_feedback,
             cqfl_uplink_error_feedback=args.cqfl_uplink_error_feedback,
+            cqfl_restore_best=args.cqfl_restore_best,
+            cqfl_reduce_lr_patience=args.cqfl_reduce_lr_patience,
+            cqfl_reduce_lr_factor=args.cqfl_reduce_lr_factor,
+            cqfl_min_learning_rate=args.cqfl_min_learning_rate,
+            cqfl_early_stopping_patience=args.cqfl_early_stopping_patience,
+            cqfl_early_stopping_min_delta=args.cqfl_early_stopping_min_delta,
         )
         output = run(config)
         print(f"completed: {output}")

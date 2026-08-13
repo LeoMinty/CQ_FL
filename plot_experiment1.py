@@ -39,7 +39,7 @@ COMPARABLE_CONFIG_FIELDS = (
     "clients",
     "rounds",
     "local_epochs",
-    "batch_size",
+    #"batch_size",
     "block_size",
     "max_train_samples",
     "max_test_samples",
@@ -57,7 +57,16 @@ METHOD_SPECIFIC_CONFIG_FIELDS = {
     ),
     "signsgd": ("learning_rate",),
     "w2_fp32_adam": ("learning_rate",),
-    "cqfl": ("learning_rate", "cqfl_uplink_error_feedback"),
+    "cqfl": (
+        "learning_rate",
+        "cqfl_uplink_error_feedback",
+        "cqfl_restore_best",
+        "cqfl_reduce_lr_patience",
+        "cqfl_reduce_lr_factor",
+        "cqfl_min_learning_rate",
+        "cqfl_early_stopping_patience",
+        "cqfl_early_stopping_min_delta",
+    ),
 }
 
 COMPARABLE_CONFIG_DEFAULTS = {
@@ -66,6 +75,12 @@ COMPARABLE_CONFIG_DEFAULTS = {
     "bitfl_bit_flip_probability": 0.0,
     "bitfl_error_feedback": True,
     "cqfl_uplink_error_feedback": False,
+    "cqfl_restore_best": False,
+    "cqfl_reduce_lr_patience": 0,
+    "cqfl_reduce_lr_factor": 0.5,
+    "cqfl_min_learning_rate": 1e-5,
+    "cqfl_early_stopping_patience": 0,
+    "cqfl_early_stopping_min_delta": 0.0,
 }
 
 
@@ -152,18 +167,25 @@ def _read_run(metrics_path: Path) -> Tuple[dict, np.ndarray]:
     return config, curve
 
 
-def _config_signature(config: dict) -> Dict[str, object]:
-    return {
+def _config_signature(config: dict, max_rounds: int = 0) -> Dict[str, object]:
+    signature = {
         field: config.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
         for field in COMPARABLE_CONFIG_FIELDS
     }
+    if max_rounds:
+        signature["rounds"] = max_rounds
+    return signature
 
 
-def _describe_config_difference(reference: dict, candidate: dict) -> str:
+def _describe_config_difference(
+    reference: dict, candidate: dict, max_rounds: int = 0
+) -> str:
     differences = []
     for field in COMPARABLE_CONFIG_FIELDS:
         reference_value = reference.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
         candidate_value = candidate.get(field, COMPARABLE_CONFIG_DEFAULTS.get(field))
+        if field == "rounds" and max_rounds:
+            reference_value = candidate_value = max_rounds
         if reference_value != candidate_value:
             differences.append(
                 f"{field}: {reference_value!r} != {candidate_value!r}"
@@ -197,6 +219,7 @@ def collect(
     dataset: str,
     method: str,
     requested_seeds: Iterable[int],
+    max_rounds: int = 0,
 ) -> Tuple[np.ndarray, List[dict], List[Path]]:
     requested_seeds = tuple(int(seed) for seed in requested_seeds)
     requested_set = set(requested_seeds)
@@ -210,6 +233,13 @@ def collect(
     extra_runs = []
     for path in paths:
         config, curve = _read_run(path)
+        if max_rounds:
+            if len(curve) < max_rounds:
+                raise ValueError(
+                    f"run has only {len(curve)} rounds but --max-rounds "
+                    f"requires {max_rounds}: {path}"
+                )
+            curve = curve[:max_rounds]
         if config.get("dataset") != dataset or config.get("method") != method:
             raise ValueError(
                 f"config identity does not match its directory: {path}"
@@ -309,12 +339,20 @@ def main() -> None:
         "--results-root", type=Path, default=Path("results/experiment1")
     )
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 2024])
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=0,
+        help="plot only rounds 1..N and allow source runs configured for more rounds",
+    )
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--summary-output", type=Path, default=None)
     args = parser.parse_args()
 
     if len(args.seeds) != len(set(args.seeds)):
         raise ValueError(f"--seeds contains duplicates: {args.seeds}")
+    if args.max_rounds < 0:
+        raise ValueError("--max-rounds must be non-negative")
 
     output = args.output or (
         args.results_root / f"{args.dataset}_accuracy_vs_round.pdf"
@@ -328,15 +366,23 @@ def main() -> None:
     reference_path = None
     for method in METHOD_NAMES:
         curves, configs, paths = collect(
-            args.results_root, args.dataset, method, args.seeds
+            args.results_root,
+            args.dataset,
+            method,
+            args.seeds,
+            args.max_rounds,
         )
         curves_by_method[method] = curves
         for config, path in zip(configs, paths):
             if reference_config is None:
                 reference_config, reference_path = config, path
                 continue
-            if _config_signature(config) != _config_signature(reference_config):
-                difference = _describe_config_difference(reference_config, config)
+            if _config_signature(config, args.max_rounds) != _config_signature(
+                reference_config, args.max_rounds
+            ):
+                difference = _describe_config_difference(
+                    reference_config, config, args.max_rounds
+                )
                 raise ValueError(
                     f"incomparable configurations: {reference_path} vs {path}: "
                     f"{difference}"

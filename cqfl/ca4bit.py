@@ -17,6 +17,7 @@ unchanged without paying one Python-loop iteration per 64 values.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Dict, Iterable, Optional, Sequence, Tuple
 
@@ -355,6 +356,17 @@ class CA4BitAdam:
 
     def state_bytes(self) -> int:
         return int(sum(state.nbytes for state in self._states.values()))
+
+    def snapshot(self) -> dict:
+        """Copy persistent optimizer state for an in-process round checkpoint."""
+        return {
+            "iterations": int(self.iterations),
+            "states": copy.deepcopy(self._states),
+        }
+
+    def restore(self, snapshot: dict) -> None:
+        self.iterations = int(snapshot["iterations"])
+        self._states = copy.deepcopy(snapshot["states"])
 
     def reset(self) -> None:
         self.iterations = 0

@@ -28,11 +28,18 @@ class FiveMethodResultTests(unittest.TestCase):
             "max_train_samples": 0,
             "max_test_samples": 0,
             "model_profile": "standard",
+            "validation_ratio": 0.0,
             "bitfl_normalization_bound": 1.0,
             "bitfl_topk_fraction": 0.5,
             "bitfl_bit_flip_probability": 0.0,
             "bitfl_error_feedback": True,
             "cqfl_uplink_error_feedback": False,
+            "cqfl_restore_best": False,
+            "cqfl_reduce_lr_patience": 0,
+            "cqfl_reduce_lr_factor": 0.5,
+            "cqfl_min_learning_rate": 1e-5,
+            "cqfl_early_stopping_patience": 0,
+            "cqfl_early_stopping_min_delta": 0.0,
         }
         (run / "config.json").write_text(json.dumps(config), encoding="utf-8")
         fields = [
