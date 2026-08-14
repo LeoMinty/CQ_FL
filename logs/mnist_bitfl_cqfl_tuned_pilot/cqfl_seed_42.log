@@ -1,0 +1,21 @@
+[mnist/cqfl] round 001/20: loss=2.2023, acc=0.2054, time=48.6s
+[mnist/cqfl] round 002/20: loss=1.9097, acc=0.3588, time=48.1s
+[mnist/cqfl] round 003/20: loss=1.6959, acc=0.4809, time=48.2s
+[mnist/cqfl] round 004/20: loss=1.4702, acc=0.5823, time=48.0s
+[mnist/cqfl] round 005/20: loss=1.2493, acc=0.6748, time=49.8s
+[mnist/cqfl] round 006/20: loss=1.0481, acc=0.7361, time=50.1s
+[mnist/cqfl] round 007/20: loss=0.8804, acc=0.7802, time=47.9s
+[mnist/cqfl] round 008/20: loss=0.7287, acc=0.8180, time=46.3s
+[mnist/cqfl] round 009/20: loss=0.6290, acc=0.8346, time=47.4s
+[mnist/cqfl] round 010/20: loss=0.5471, acc=0.8528, time=46.5s
+[mnist/cqfl] round 011/20: loss=0.4893, acc=0.8622, time=46.5s
+[mnist/cqfl] round 012/20: loss=0.4398, acc=0.8748, time=46.8s
+[mnist/cqfl] round 013/20: loss=0.4040, acc=0.8830, time=49.3s
+[mnist/cqfl] round 014/20: loss=0.3808, acc=0.8862, time=48.4s
+[mnist/cqfl] round 015/20: loss=0.3610, acc=0.8931, time=49.8s
+[mnist/cqfl] round 016/20: loss=0.3319, acc=0.9016, time=47.7s
+[mnist/cqfl] round 017/20: loss=0.3328, acc=0.8998, time=49.3s
+[mnist/cqfl] round 018/20: loss=0.2929, acc=0.9143, time=48.8s
+[mnist/cqfl] round 019/20: loss=0.3015, acc=0.9106, time=47.9s
+[mnist/cqfl] round 020/20: loss=0.2649, acc=0.9221, time=48.2s
+completed: results/mnist_bitfl_cqfl_tuned_pilot/mnist/cqfl/seed_42_20260814_143535

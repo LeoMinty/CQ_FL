@@ -1,0 +1,21 @@
+[mnist/bitfl] round 001/20: loss=2.3074, acc=0.1466, time=39.9s
+[mnist/bitfl] round 002/20: loss=2.3148, acc=0.1204, time=39.5s
+[mnist/bitfl] round 003/20: loss=2.3164, acc=0.1255, time=37.6s
+[mnist/bitfl] round 004/20: loss=2.3052, acc=0.1429, time=39.5s
+[mnist/bitfl] round 005/20: loss=2.2791, acc=0.1732, time=38.1s
+[mnist/bitfl] round 006/20: loss=2.2235, acc=0.2033, time=39.5s
+[mnist/bitfl] round 007/20: loss=2.1461, acc=0.2420, time=37.1s
+[mnist/bitfl] round 008/20: loss=2.0433, acc=0.2807, time=39.0s
+[mnist/bitfl] round 009/20: loss=1.9276, acc=0.3214, time=38.6s
+[mnist/bitfl] round 010/20: loss=1.8038, acc=0.3688, time=39.7s
+[mnist/bitfl] round 011/20: loss=1.6925, acc=0.4107, time=37.6s
+[mnist/bitfl] round 012/20: loss=1.5875, acc=0.4524, time=38.0s
+[mnist/bitfl] round 013/20: loss=1.4698, acc=0.5007, time=37.1s
+[mnist/bitfl] round 014/20: loss=1.3671, acc=0.5404, time=36.4s
+[mnist/bitfl] round 015/20: loss=1.2691, acc=0.5757, time=36.9s
+[mnist/bitfl] round 016/20: loss=1.2172, acc=0.5953, time=37.7s
+[mnist/bitfl] round 017/20: loss=1.1890, acc=0.6055, time=37.3s
+[mnist/bitfl] round 018/20: loss=1.1270, acc=0.6262, time=36.5s
+[mnist/bitfl] round 019/20: loss=1.0961, acc=0.6398, time=37.0s
+[mnist/bitfl] round 020/20: loss=1.0496, acc=0.6581, time=38.5s
+completed: results/mnist_bitfl_cqfl_tuned_pilot/mnist/bitfl/seed_42_20260814_121419
