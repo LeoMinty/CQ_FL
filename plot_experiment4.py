@@ -225,6 +225,40 @@ def _bytes_to_target(
     return reached
 
 
+def _focus_x_limit(
+    accuracy_by_method: Dict[str, np.ndarray],
+    cumulative_by_method: Dict[str, np.ndarray],
+    focus_method: str,
+    divisor: float,
+    padding_fraction: float,
+) -> Tuple[float, float, Dict[str, float]]:
+    """Return a cropped x limit that keeps the focus curve complete.
+
+    The reference accuracy is the peak of the focus method's mean curve.  For
+    every other method that reaches that level, retain its first crossing.  The
+    right boundary is the latest of those crossings and the focus method's
+    complete communication budget, plus a small visual margin.  Methods that
+    never reach the reference accuracy cannot force the plot to stay wide.
+    """
+
+    focus_accuracy = accuracy_by_method[focus_method].mean(axis=0)
+    focus_peak = float(np.max(focus_accuracy))
+    focus_final_x = float(cumulative_by_method[focus_method][0, -1]) / divisor
+    first_crossings: Dict[str, float] = {}
+    for method in METHOD_NAMES:
+        if method == focus_method:
+            continue
+        mean_accuracy = accuracy_by_method[method].mean(axis=0)
+        positions = np.flatnonzero(mean_accuracy >= focus_peak)
+        if positions.size:
+            first_crossings[method] = (
+                float(cumulative_by_method[method][0, positions[0]]) / divisor
+            )
+
+    anchor = max([focus_final_x, *first_crossings.values()])
+    return anchor * (1.0 + padding_fraction), focus_peak, first_crossings
+
+
 def _write_summary(
     path: Path,
     dataset: str,
@@ -310,6 +344,23 @@ def main() -> None:
     )
     parser.add_argument("--unit", choices=UNIT_DIVISORS, default="mib")
     parser.add_argument("--xscale", choices=["linear", "log"], default="linear")
+    parser.add_argument(
+        "--focus-method",
+        choices=METHOD_NAMES,
+        default=None,
+        help=(
+            "crop the right side after keeping this method's full curve and "
+            "the first point where each reachable method attains its peak mean accuracy"
+        ),
+    )
+    parser.add_argument(
+        "--focus-padding-fraction",
+        type=float,
+        default=0.05,
+        help="fractional x-axis margin after the automatic focus boundary",
+    )
+    parser.add_argument("--figure-width", type=float, default=7.2)
+    parser.add_argument("--figure-height", type=float, default=4.8)
     parser.add_argument("--target-accuracy", type=float, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--summary-output", type=Path, default=None)
@@ -321,6 +372,10 @@ def main() -> None:
         raise ValueError("--max-rounds must be non-negative")
     if args.target_accuracy is not None and not 0.0 <= args.target_accuracy <= 1.0:
         raise ValueError("--target-accuracy must lie in [0, 1]")
+    if args.focus_padding_fraction < 0.0:
+        raise ValueError("--focus-padding-fraction must be non-negative")
+    if args.figure_width <= 0.0 or args.figure_height <= 0.0:
+        raise ValueError("--figure-width and --figure-height must be positive")
 
     output = args.output or (
         args.results_root
@@ -360,7 +415,7 @@ def main() -> None:
                 )
 
     divisor, unit_label = UNIT_DIVISORS[args.unit]
-    fig, axis = plt.subplots(figsize=(7.2, 4.8))
+    fig, axis = plt.subplots(figsize=(args.figure_width, args.figure_height))
     for method in METHOD_NAMES:
         accuracy = accuracy_by_method[method]
         cumulative = cumulative_by_method[method]
@@ -396,6 +451,17 @@ def main() -> None:
             label=f"Target accuracy = {args.target_accuracy:.3f}",
         )
     axis.set_xscale(args.xscale)
+    focus_details = None
+    if args.focus_method is not None:
+        focus_limit, focus_peak, first_crossings = _focus_x_limit(
+            accuracy_by_method,
+            cumulative_by_method,
+            args.focus_method,
+            divisor,
+            args.focus_padding_fraction,
+        )
+        axis.set_xlim(right=focus_limit)
+        focus_details = (focus_limit, focus_peak, first_crossings)
     axis.set_xlabel(f"Cumulative uplink payload ({unit_label})")
     axis.set_ylabel("Test accuracy")
     axis.grid(alpha=0.25, which="both")
@@ -418,6 +484,16 @@ def main() -> None:
         f"rounds={next(iter(accuracy_by_method.values())).shape[1]}"
     )
     print("uplink bytes are packed logical payload summed over all clients")
+    if focus_details is not None:
+        focus_limit, focus_peak, first_crossings = focus_details
+        crossing_text = ", ".join(
+            f"{method}={value:.3f} {unit_label}"
+            for method, value in first_crossings.items()
+        ) or "none"
+        print(
+            f"focused on {args.focus_method}: peak mean accuracy={focus_peak:.6f}, "
+            f"xmax={focus_limit:.3f} {unit_label}, first crossings: {crossing_text}"
+        )
     print(f"saved {output}")
     print(f"saved {summary_output}")
 
