@@ -345,6 +345,12 @@ def main() -> None:
     parser.add_argument("--unit", choices=UNIT_DIVISORS, default="mib")
     parser.add_argument("--xscale", choices=["linear", "log"], default="linear")
     parser.add_argument(
+        "--x-min",
+        type=float,
+        default=None,
+        help="explicit left x-axis boundary in the selected --unit",
+    )
+    parser.add_argument(
         "--focus-method",
         choices=METHOD_NAMES,
         default=None,
@@ -376,6 +382,8 @@ def main() -> None:
         raise ValueError("--focus-padding-fraction must be non-negative")
     if args.figure_width <= 0.0 or args.figure_height <= 0.0:
         raise ValueError("--figure-width and --figure-height must be positive")
+    if args.xscale == "log" and args.x_min is not None and args.x_min <= 0.0:
+        raise ValueError("--x-min must be positive when --xscale log is used")
 
     output = args.output or (
         args.results_root
@@ -462,6 +470,8 @@ def main() -> None:
         )
         axis.set_xlim(right=focus_limit)
         focus_details = (focus_limit, focus_peak, first_crossings)
+    if args.x_min is not None:
+        axis.set_xlim(left=args.x_min)
     axis.set_xlabel(f"Cumulative uplink payload ({unit_label})")
     axis.set_ylabel("Test accuracy")
     axis.grid(alpha=0.25, which="both")
