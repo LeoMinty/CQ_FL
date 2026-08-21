@@ -24,6 +24,7 @@ from BitFLCommunication import (
 )
 from cqfl.config import METHOD_NAMES
 from plot_experiment1 import (
+    COLORS,
     LABELS,
     _config_signature,
     _describe_config_difference,
@@ -39,11 +40,11 @@ UNIT_DIVISORS = {
 }
 
 STYLES = {
-    "fedavg_fp32": {"color": "#1f77b4", "linestyle": "-"},
-    "bitfl": {"color": "#9467bd", "linestyle": ":"},
-    "signsgd": {"color": "#ff7f0e", "linestyle": "--"},
-    "w2_fp32_adam": {"color": "#2ca02c", "linestyle": "-."},
-    "cqfl": {"color": "#d62728", "linestyle": "-"},
+    "fedavg_fp32": {"linestyle": "-"},
+    "bitfl": {"linestyle": ":"},
+    "signsgd": {"linestyle": "--"},
+    "w2_fp32_adam": {"linestyle": "-."},
+    "cqfl": {"linestyle": "-"},
 }
 
 
@@ -439,6 +440,7 @@ def main() -> None:
             marker="o",
             markersize=3.0,
             markevery=marker_step,
+            color=COLORS[method],
             **STYLES[method],
         )
         if accuracy.shape[0] > 1:
@@ -446,7 +448,7 @@ def main() -> None:
                 x,
                 np.clip(mean - std, 0.0, 1.0),
                 np.clip(mean + std, 0.0, 1.0),
-                color=STYLES[method]["color"],
+                color=COLORS[method],
                 alpha=0.12,
             )
 

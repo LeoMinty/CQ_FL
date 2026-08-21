@@ -24,7 +24,15 @@ LABELS = {
     "bitfl": "BitFL (1-bit)",
     "signsgd": "SignSGD",
     "w2_fp32_adam": "2-bit W + FP32 Adam",
-    "cqfl": "CQ-FL",
+    "cqfl": "CQ-FL (ours)",
+}
+
+COLORS = {
+    "fedavg_fp32": "#1f77b4",
+    "bitfl": "#9467bd",
+    "signsgd": "#ff7f0e",
+    "w2_fp32_adam": "#2ca02c",
+    "cqfl": "#d62728",
 }
 
 # ``method``, ``seed`` and ``output_root`` are deliberately excluded: method
@@ -394,9 +402,15 @@ def main() -> None:
         rounds = np.arange(1, curves.shape[1] + 1)
         mean = curves.mean(axis=0)
         std = curves.std(axis=0)
-        plt.plot(rounds, mean, label=LABELS[method])
+        plt.plot(rounds, mean, label=LABELS[method], color=COLORS[method])
         if curves.shape[0] > 1:
-            plt.fill_between(rounds, mean - std, mean + std, alpha=0.15)
+            plt.fill_between(
+                rounds,
+                mean - std,
+                mean + std,
+                color=COLORS[method],
+                alpha=0.15,
+            )
 
     plt.xlabel("Communication round")
     plt.ylabel("Test accuracy")
