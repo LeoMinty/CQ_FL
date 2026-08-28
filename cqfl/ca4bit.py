@@ -123,6 +123,24 @@ class ComplexFirstMoment:
 
 
 @dataclass
+class IndependentComplexFirstMoment:
+    """Component-wise 4-bit complex first moment for the CPMQ ablation.
+
+    The real and imaginary components have separate block scales.  This is the
+    conventional independent-quantization control described by experiment 2;
+    unlike CPMQ, it does not encode a shared phase/magnitude geometry.
+    """
+
+    real: Block4Tensor
+    imag: Block4Tensor
+    shape: Tuple[int, ...]
+
+    @property
+    def nbytes(self) -> int:
+        return int(self.real.nbytes + self.imag.nbytes)
+
+
+@dataclass
 class MomentState:
     complex_parameter: bool
     first: object
@@ -268,6 +286,27 @@ def dequantize_complex_first(state: ComplexFirstMoment) -> np.ndarray:
     return np.stack([real, imag], axis=-1)
 
 
+def quantize_complex_first_independent(
+    values: np.ndarray, block_size: int = 64
+) -> IndependentComplexFirstMoment:
+    values = np.asarray(values, dtype=np.float32)
+    if values.shape[-1] != 2:
+        raise ValueError("independent complex first moment expects a final [real, imag] axis")
+    return IndependentComplexFirstMoment(
+        real=quantize_block4(values[..., 0], block_size, "signed_de"),
+        imag=quantize_block4(values[..., 1], block_size, "signed_de"),
+        shape=tuple(values.shape),
+    )
+
+
+def dequantize_complex_first_independent(
+    state: IndependentComplexFirstMoment,
+) -> np.ndarray:
+    real = dequantize_block4(state.real)
+    imag = dequantize_block4(state.imag)
+    return np.stack([real, imag], axis=-1).reshape(state.shape)
+
+
 class CA4BitAdam:
     """Adam with compressed persistent moments, following the CQ-FL draft."""
 
@@ -278,6 +317,7 @@ class CA4BitAdam:
         beta2: float = 0.999,
         epsilon: float = 1e-7,
         block_size: int = 64,
+        complex_first_moment: str = "cpmq",
     ) -> None:
         if tf is None:
             raise RuntimeError("TensorFlow is required for CA4BitAdam")
@@ -286,6 +326,11 @@ class CA4BitAdam:
         self.beta2 = float(beta2)
         self.epsilon = float(epsilon)
         self.block_size = int(block_size)
+        if complex_first_moment not in {"cpmq", "independent"}:
+            raise ValueError(
+                "complex_first_moment must be either 'cpmq' or 'independent'"
+            )
+        self.complex_first_moment = complex_first_moment
         self.iterations = 0
         self._states: Dict[int, MomentState] = {}
 
@@ -298,7 +343,14 @@ class CA4BitAdam:
         shape = tuple(int(d) for d in variable.shape)
         complex_parameter = self._is_complex_parameter(variable)
         if complex_parameter:
-            first = quantize_complex_first(np.zeros(shape, np.float32), self.block_size)
+            if self.complex_first_moment == "cpmq":
+                first = quantize_complex_first(
+                    np.zeros(shape, np.float32), self.block_size
+                )
+            else:
+                first = quantize_complex_first_independent(
+                    np.zeros(shape, np.float32), self.block_size
+                )
             second = quantize_block4(
                 np.zeros(shape, np.float32), self.block_size, "linear_no_zero"
             )
@@ -330,7 +382,10 @@ class CA4BitAdam:
                 self._states[key] = state
             grad = np.asarray(gradient.numpy() if hasattr(gradient, "numpy") else gradient, np.float32)
             if state.complex_parameter:
-                first = dequantize_complex_first(state.first)
+                if self.complex_first_moment == "cpmq":
+                    first = dequantize_complex_first(state.first)
+                else:
+                    first = dequantize_complex_first_independent(state.first)
                 second = dequantize_block4(state.second)
                 first = self.beta1 * first + (1.0 - self.beta1) * grad
                 # Keep the exact Adam update: real and imaginary coordinates
@@ -340,7 +395,12 @@ class CA4BitAdam:
                 second_hat = second / correction2
                 update = first_hat / (np.sqrt(second_hat) + self.epsilon)
                 variable.assign_sub(tf.convert_to_tensor(self.learning_rate * update, variable.dtype))
-                state.first = quantize_complex_first(first, self.block_size)
+                if self.complex_first_moment == "cpmq":
+                    state.first = quantize_complex_first(first, self.block_size)
+                else:
+                    state.first = quantize_complex_first_independent(
+                        first, self.block_size
+                    )
                 state.second = quantize_block4(second, self.block_size, "linear_no_zero")
             else:
                 first = dequantize_block4(state.first)

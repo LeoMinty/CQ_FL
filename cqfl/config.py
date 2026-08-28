@@ -19,6 +19,31 @@ MODEL_PROFILES: Tuple[str, ...] = (
     "dronerf_small",
 )
 
+CQFL_COMPLEX_FIRST_MOMENT_MODES: Tuple[str, ...] = (
+    "cpmq",
+    "independent",
+)
+
+ABLATION_VARIANTS = {
+    2: {
+        "cpmq": {"cqfl_complex_first_moment": "cpmq", "cqfl_phase_ste": True},
+        "independent": {
+            "cqfl_complex_first_moment": "independent",
+            "cqfl_phase_ste": True,
+        },
+    },
+    3: {
+        "phase_ste": {
+            "cqfl_complex_first_moment": "cpmq",
+            "cqfl_phase_ste": True,
+        },
+        "standard_ste": {
+            "cqfl_complex_first_moment": "cpmq",
+            "cqfl_phase_ste": False,
+        },
+    },
+}
+
 
 @dataclass(frozen=True)
 class DatasetConfig:
@@ -74,6 +99,8 @@ class ExperimentConfig:
     bitfl_bit_flip_probability: float = 0.0
     bitfl_error_feedback: bool = True
     cqfl_uplink_error_feedback: bool = False
+    cqfl_complex_first_moment: str = "cpmq"
+    cqfl_phase_ste: bool = True
     cqfl_restore_best: bool = False
     cqfl_reduce_lr_patience: int = 0
     cqfl_reduce_lr_factor: float = 0.5
@@ -92,6 +119,11 @@ class ExperimentConfig:
             raise ValueError("mnist_small model profile is only valid for MNIST")
         if self.model_profile == "dronerf_small" and self.dataset != "dronerf":
             raise ValueError("dronerf_small model profile is only valid for DroneRF")
+        if self.cqfl_complex_first_moment not in CQFL_COMPLEX_FIRST_MOMENT_MODES:
+            raise ValueError(
+                "cqfl_complex_first_moment must be one of "
+                f"{CQFL_COMPLEX_FIRST_MOMENT_MODES}"
+            )
         if not 0.0 < self.bitfl_normalization_bound <= 1.0:
             raise ValueError("bitfl_normalization_bound must lie in (0, 1]")
         if not 0.0 < self.bitfl_topk_fraction <= 1.0:

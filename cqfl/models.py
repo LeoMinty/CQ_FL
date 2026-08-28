@@ -20,6 +20,7 @@ def build_model(
     num_classes: int,
     method: str,
     model_profile: str = "standard",
+    cqfl_phase_ste: bool = True,
 ):
     """Build one common architecture for all experiment-one methods.
 
@@ -42,7 +43,7 @@ def build_model(
         raise ValueError(f"unknown model profile: {model_profile}")
 
     quantized_weight = method in {"w2_fp32_adam", "cqfl"}
-    quantized_gradient = method == "cqfl"
+    quantized_gradient = method == "cqfl" and cqfl_phase_ste
 
     inputs = tf.keras.Input(shape=input_shape, name="input")
     x = inputs

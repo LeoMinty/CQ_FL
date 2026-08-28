@@ -146,6 +146,7 @@ class BitFLOffloadTrainer:
         self.model = model
         self.method = method
         self.learning_rate = float(config.learning_rate)
+        self.cqfl_phase_ste = bool(config.cqfl_phase_ste)
         _kernel_mask, self.complex_trainable_mask = _bitfl_variable_masks(model)
         if len(self.complex_trainable_mask) != len(model.trainable_variables):
             raise RuntimeError("complex gradient mask does not match trainable variables")
@@ -159,6 +160,7 @@ class BitFLOffloadTrainer:
                 self.optimizer = CA4BitAdam(
                     learning_rate=config.learning_rate,
                     block_size=config.block_size,
+                    complex_first_moment=config.cqfl_complex_first_moment,
                 )
             elif method == "signsgd":
                 self.optimizer = None
@@ -211,7 +213,7 @@ class BitFLOffloadTrainer:
             # The original layer already quantizes Conv kernels through its
             # custom gradient.  Applying the same unit map here also covers
             # complex biases while leaving real Dense/BN tensors untouched.
-            if self.method == "cqfl" and is_complex:
+            if self.method == "cqfl" and self.cqfl_phase_ste and is_complex:
                 gradient = phase_quantize_unit_tf(gradient)
             prepared.append(gradient)
         return prepared
@@ -326,6 +328,7 @@ def run(config: ExperimentConfig) -> Path:
         bundle.num_classes,
         config.method,
         config.model_profile,
+        cqfl_phase_ste=config.cqfl_phase_ste,
     )
     _ = global_model(tf.zeros((1, *bundle.input_shape), tf.float32), training=False)
     global_trainable = [np.asarray(v.numpy(), np.float32) for v in global_model.trainable_variables]
@@ -356,6 +359,7 @@ def run(config: ExperimentConfig) -> Path:
             bundle.num_classes,
             config.method,
             config.model_profile,
+            cqfl_phase_ste=config.cqfl_phase_ste,
         )
         _ = model(tf.zeros((1, *bundle.input_shape), tf.float32), training=False)
         trainer = BitFLOffloadTrainer(model, config.method, config)
@@ -697,6 +701,16 @@ def run(config: ExperimentConfig) -> Path:
             ),
             "non_trainable_uplink": "FP32",
             "optimizer": "CA4BitAdam" if config.method == "cqfl" else config.method,
+            "cqfl_complex_first_moment": (
+                config.cqfl_complex_first_moment
+                if config.method == "cqfl"
+                else "not used by this method"
+            ),
+            "cqfl_phase_ste": (
+                bool(config.cqfl_phase_ste)
+                if config.method == "cqfl"
+                else "not used by this method"
+            ),
             "cqfl_uplink_error_feedback": (
                 "per-client residual across communication rounds"
                 if config.method == "cqfl" and config.cqfl_uplink_error_feedback
