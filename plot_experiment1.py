@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 from Bit2Communication import PROTOCOL_VERSION
@@ -34,6 +36,55 @@ COLORS = {
     "w2_fp32_adam": "#2ca02c",
     "cqfl": "#d62728",
 }
+
+DATASETS = ("ravdess", "dronerf", "mnist")
+DATASET_TITLES = {
+    "ravdess": "RAVDESS",
+    "dronerf": "DroneRF",
+    "mnist": "MNIST",
+}
+DEFAULT_TRIPTYCH_ROOTS = {
+    "ravdess": Path("results/experiment1_five_v1_final"),
+    "dronerf": Path("results/experiment1_five_cqfl_optimized_50round_final"),
+    "mnist": Path("results/experiment1_five_mnist_tuned_final"),
+}
+STYLES = {
+    "fedavg_fp32": {"linestyle": "-", "marker": "o"},
+    "bitfl": {"linestyle": ":", "marker": "s"},
+    "signsgd": {"linestyle": "--", "marker": "^"},
+    "w2_fp32_adam": {"linestyle": "-.", "marker": "D"},
+    "cqfl": {"linestyle": "-", "marker": "*"},
+}
+
+
+def configure_paper_plot_style() -> None:
+    """Use fonts that remain at least 9 pt in a full-width paper figure."""
+
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": [
+                "Times New Roman",
+                "Nimbus Roman",
+                "Times",
+                "cmr10",
+            ],
+            "font.size": 9,
+            "axes.labelsize": 9,
+            "axes.titlesize": 9,
+            "xtick.labelsize": 9,
+            "ytick.labelsize": 9,
+            "legend.fontsize": 9,
+            "axes.formatter.use_mathtext": True,
+            "mathtext.fontset": "cm",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+    )
+    selected_font = font_manager.findfont(
+        font_manager.FontProperties(family="serif")
+    )
+    print(f"paper plot font: {selected_font}")
 
 # ``method``, ``seed`` and ``output_root`` are deliberately excluded: method
 # must differ between curves, seed must differ between repetitions, and the
@@ -341,12 +392,27 @@ def _write_summary(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dataset", required=True, choices=["ravdess", "dronerf", "mnist"]
+        "--dataset", required=True, choices=[*DATASETS, "all"]
     )
     parser.add_argument(
         "--results-root", type=Path, default=Path("results/experiment1")
     )
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 2024])
+    parser.add_argument(
+        "--ravdess-results-root",
+        type=Path,
+        default=DEFAULT_TRIPTYCH_ROOTS["ravdess"],
+    )
+    parser.add_argument(
+        "--dronerf-results-root",
+        type=Path,
+        default=DEFAULT_TRIPTYCH_ROOTS["dronerf"],
+    )
+    parser.add_argument(
+        "--mnist-results-root",
+        type=Path,
+        default=DEFAULT_TRIPTYCH_ROOTS["mnist"],
+    )
     parser.add_argument(
         "--max-rounds",
         type=int,
@@ -362,71 +428,155 @@ def main() -> None:
     if args.max_rounds < 0:
         raise ValueError("--max-rounds must be non-negative")
 
-    output = args.output or (
-        args.results_root / f"{args.dataset}_accuracy_vs_round.pdf"
-    )
-    summary_output = args.summary_output or (
-        args.results_root / f"{args.dataset}_accuracy_summary.csv"
-    )
-
-    curves_by_method: Dict[str, np.ndarray] = {}
-    reference_config = None
-    reference_path = None
-    for method in METHOD_NAMES:
-        curves, configs, paths = collect(
-            args.results_root,
-            args.dataset,
-            method,
-            args.seeds,
-            args.max_rounds,
-        )
-        curves_by_method[method] = curves
-        for config, path in zip(configs, paths):
-            if reference_config is None:
-                reference_config, reference_path = config, path
-                continue
-            if _config_signature(config, args.max_rounds) != _config_signature(
-                reference_config, args.max_rounds
-            ):
-                difference = _describe_config_difference(
-                    reference_config, config, args.max_rounds
-                )
-                raise ValueError(
-                    f"incomparable configurations: {reference_path} vs {path}: "
-                    f"{difference}"
-                )
-
-    plt.figure(figsize=(7.2, 4.8))
-    for method in METHOD_NAMES:
-        curves = curves_by_method[method]
-        rounds = np.arange(1, curves.shape[1] + 1)
-        mean = curves.mean(axis=0)
-        std = curves.std(axis=0)
-        plt.plot(rounds, mean, label=LABELS[method], color=COLORS[method])
-        if curves.shape[0] > 1:
-            plt.fill_between(
-                rounds,
-                mean - std,
-                mean + std,
-                color=COLORS[method],
-                alpha=0.15,
+    roots = {
+        "ravdess": args.ravdess_results_root,
+        "dronerf": args.dronerf_results_root,
+        "mnist": args.mnist_results_root,
+    }
+    if args.dataset == "all":
+        missing_roots = [name for name, root in roots.items() if root is None]
+        if missing_roots:
+            raise ValueError(
+                "--dataset all requires separate result roots for all datasets; "
+                f"missing {missing_roots}"
             )
+        if args.summary_output is not None:
+            raise ValueError("--summary-output is only supported for one dataset")
+        datasets = list(DATASETS)
+        output = args.output or Path("experiment1_accuracy_triptych.pdf")
+    else:
+        datasets = [args.dataset]
+        roots[args.dataset] = roots[args.dataset] or args.results_root
+        output = args.output or (
+            roots[args.dataset] / f"{args.dataset}_accuracy_vs_round.pdf"
+        )
 
-    plt.xlabel("Communication round")
-    plt.ylabel("Test accuracy")
-    plt.grid(alpha=0.25)
-    plt.legend()
-    plt.tight_layout()
+    curves_by_dataset: Dict[str, Dict[str, np.ndarray]] = {}
+    for dataset in datasets:
+        curves_by_method: Dict[str, np.ndarray] = {}
+        reference_config = None
+        reference_path = None
+        for method in METHOD_NAMES:
+            curves, configs, paths = collect(
+                roots[dataset], dataset, method, args.seeds, args.max_rounds
+            )
+            curves_by_method[method] = curves
+            for config, path in zip(configs, paths):
+                if reference_config is None:
+                    reference_config, reference_path = config, path
+                    continue
+                if _config_signature(config, args.max_rounds) != _config_signature(
+                    reference_config, args.max_rounds
+                ):
+                    difference = _describe_config_difference(
+                        reference_config, config, args.max_rounds
+                    )
+                    raise ValueError(
+                        f"incomparable configurations: {reference_path} vs {path}: "
+                        f"{difference}"
+                    )
+        curves_by_dataset[dataset] = curves_by_method
+        summary_output = (
+            args.summary_output
+            if len(datasets) == 1 and args.summary_output is not None
+            else roots[dataset] / f"{dataset}_accuracy_summary.csv"
+        )
+        _write_summary(summary_output, dataset, list(args.seeds), curves_by_method)
+
+    configure_paper_plot_style()
+    if len(datasets) == 3:
+        fig, grid_axes = plt.subplots(2, 2, figsize=(3.39, 2.40))
+        axes = [grid_axes[0, 0], grid_axes[0, 1], grid_axes[1, 0]]
+        legend_axis = grid_axes[1, 1]
+        legend_axis.axis("off")
+    else:
+        fig, axis = plt.subplots(figsize=(3.39, 2.55))
+        axes = [axis]
+        legend_axis = None
+
+    legend_handles = None
+    legend_labels = None
+    for panel_index, (axis, dataset) in enumerate(zip(axes, datasets)):
+        for method in METHOD_NAMES:
+            curves = curves_by_dataset[dataset][method]
+            rounds = np.arange(1, curves.shape[1] + 1)
+            mean = curves.mean(axis=0)
+            std = curves.std(axis=0)
+            marker_step = max(1, len(rounds) // 8)
+            axis.plot(
+                rounds,
+                mean,
+                label=LABELS[method],
+                color=COLORS[method],
+                linewidth=1.25,
+                markersize=3.0,
+                markevery=marker_step,
+                **STYLES[method],
+            )
+            if curves.shape[0] > 1:
+                axis.fill_between(
+                    rounds,
+                    np.clip(mean - std, 0.0, 1.0),
+                    np.clip(mean + std, 0.0, 1.0),
+                    color=COLORS[method],
+                    alpha=0.12,
+                )
+        axis.grid(alpha=0.25)
+        axis.xaxis.set_major_locator(MaxNLocator(nbins=3, integer=True))
+        axis.yaxis.set_major_locator(MaxNLocator(nbins=4))
+        axis.tick_params(axis="both", pad=1.5)
+        if len(datasets) == 3:
+            axis.text(
+                0.97,
+                0.06,
+                f"({chr(ord('a') + panel_index)}) {DATASET_TITLES[dataset]}",
+                transform=axis.transAxes,
+                ha="right",
+                va="bottom",
+                bbox={
+                    "facecolor": "white",
+                    "alpha": 0.82,
+                    "edgecolor": "none",
+                    "pad": 0.25,
+                },
+            )
+        else:
+            axis.set_title(DATASET_TITLES[dataset])
+            axis.set_ylabel("Test accuracy")
+        legend_handles, legend_labels = axis.get_legend_handles_labels()
+
+    if len(datasets) == 3:
+        fig.text(0.52, 0.01, "Communication round", ha="center", va="bottom")
+        fig.text(0.006, 0.54, "Test accuracy", ha="left", va="center", rotation=90)
+        legend_axis.legend(
+            legend_handles,
+            legend_labels,
+            loc="center",
+            ncol=1,
+            handlelength=1.4,
+            handletextpad=0.35,
+            borderpad=0.30,
+            labelspacing=0.25,
+        )
+        fig.subplots_adjust(
+            left=0.155,
+            right=0.995,
+            top=0.995,
+            bottom=0.13,
+            wspace=0.30,
+            hspace=0.18,
+        )
+    else:
+        axes[0].set_xlabel("Communication round")
+        axes[0].legend()
+        fig.tight_layout()
+
     output.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output, bbox_inches="tight")
-    plt.close()
-
-    _write_summary(
-        summary_output, args.dataset, list(args.seeds), curves_by_method
-    )
+    fig.savefig(output, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
     print(
-        f"validated methods={list(METHOD_NAMES)}, seeds={args.seeds}, "
-        f"rounds={next(iter(curves_by_method.values())).shape[1]}"
+        f"validated datasets={datasets}, methods={list(METHOD_NAMES)}, "
+        f"seeds={args.seeds}"
     )
     print(f"saved {output}")
     print(f"saved {summary_output}")

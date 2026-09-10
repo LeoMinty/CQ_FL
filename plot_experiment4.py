@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 from BitFLCommunication import (
@@ -25,10 +26,15 @@ from BitFLCommunication import (
 from cqfl.config import METHOD_NAMES
 from plot_experiment1 import (
     COLORS,
+    DATASETS,
+    DATASET_TITLES,
+    DEFAULT_TRIPTYCH_ROOTS,
     LABELS,
+    STYLES,
     _config_signature,
     _describe_config_difference,
     collect,
+    configure_paper_plot_style,
 )
 
 
@@ -38,15 +44,6 @@ UNIT_DIVISORS = {
     "mib": (1024.0**2, "MiB"),
     "gib": (1024.0**3, "GiB"),
 }
-
-STYLES = {
-    "fedavg_fp32": {"linestyle": "-"},
-    "bitfl": {"linestyle": ":"},
-    "signsgd": {"linestyle": "--"},
-    "w2_fp32_adam": {"linestyle": "-."},
-    "cqfl": {"linestyle": "-"},
-}
-
 
 def _read_cumulative_uplink(metrics_path: Path, method: str) -> np.ndarray:
     with metrics_path.open("r", encoding="utf-8") as handle:
@@ -331,12 +328,27 @@ def main() -> None:
         description="Experiment 4: accuracy versus cumulative uplink payload"
     )
     parser.add_argument(
-        "--dataset", required=True, choices=["ravdess", "dronerf", "mnist"]
+        "--dataset", required=True, choices=[*DATASETS, "all"]
     )
     parser.add_argument(
         "--results-root", type=Path, default=Path("results/experiment1")
     )
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 2024])
+    parser.add_argument(
+        "--ravdess-results-root",
+        type=Path,
+        default=DEFAULT_TRIPTYCH_ROOTS["ravdess"],
+    )
+    parser.add_argument(
+        "--dronerf-results-root",
+        type=Path,
+        default=DEFAULT_TRIPTYCH_ROOTS["dronerf"],
+    )
+    parser.add_argument(
+        "--mnist-results-root",
+        type=Path,
+        default=DEFAULT_TRIPTYCH_ROOTS["mnist"],
+    )
     parser.add_argument(
         "--max-rounds",
         type=int,
@@ -366,8 +378,8 @@ def main() -> None:
         default=0.05,
         help="fractional x-axis margin after the automatic focus boundary",
     )
-    parser.add_argument("--figure-width", type=float, default=7.2)
-    parser.add_argument("--figure-height", type=float, default=4.8)
+    parser.add_argument("--figure-width", type=float, default=None)
+    parser.add_argument("--figure-height", type=float, default=None)
     parser.add_argument("--target-accuracy", type=float, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--summary-output", type=Path, default=None)
@@ -381,130 +393,220 @@ def main() -> None:
         raise ValueError("--target-accuracy must lie in [0, 1]")
     if args.focus_padding_fraction < 0.0:
         raise ValueError("--focus-padding-fraction must be non-negative")
-    if args.figure_width <= 0.0 or args.figure_height <= 0.0:
+    if args.figure_width is not None and args.figure_width <= 0.0:
+        raise ValueError("--figure-width must be positive")
+    if args.figure_height is not None and args.figure_height <= 0.0:
         raise ValueError("--figure-width and --figure-height must be positive")
     if args.xscale == "log" and args.x_min is not None and args.x_min <= 0.0:
         raise ValueError("--x-min must be positive when --xscale log is used")
 
-    output = args.output or (
-        args.results_root
-        / f"{args.dataset}_accuracy_vs_cumulative_uplink.pdf"
-    )
-    summary_output = args.summary_output or (
-        args.results_root / f"{args.dataset}_communication_summary.csv"
-    )
-
-    accuracy_by_method: Dict[str, np.ndarray] = {}
-    cumulative_by_method: Dict[str, np.ndarray] = {}
-    reference_config = None
-    reference_path = None
-    for method in METHOD_NAMES:
-        accuracy, cumulative, configs, paths = _collect_communication(
-            args.results_root,
-            args.dataset,
-            method,
-            args.seeds,
-            args.max_rounds,
-        )
-        accuracy_by_method[method] = accuracy
-        cumulative_by_method[method] = cumulative
-        for config, path in zip(configs, paths):
-            if reference_config is None:
-                reference_config, reference_path = config, path
-                continue
-            if _config_signature(config, args.max_rounds) != _config_signature(
-                reference_config, args.max_rounds
-            ):
-                difference = _describe_config_difference(
-                    reference_config, config, args.max_rounds
-                )
-                raise ValueError(
-                    f"incomparable configurations: {reference_path} vs "
-                    f"{path}: {difference}"
-                )
-
-    divisor, unit_label = UNIT_DIVISORS[args.unit]
-    fig, axis = plt.subplots(figsize=(args.figure_width, args.figure_height))
-    for method in METHOD_NAMES:
-        accuracy = accuracy_by_method[method]
-        cumulative = cumulative_by_method[method]
-        x = cumulative[0].astype(np.float64) / divisor
-        mean = accuracy.mean(axis=0)
-        std = accuracy.std(axis=0)
-        marker_step = max(1, len(x) // 10)
-        axis.plot(
-            x,
-            mean,
-            label=LABELS[method],
-            linewidth=2.0,
-            marker="o",
-            markersize=3.0,
-            markevery=marker_step,
-            color=COLORS[method],
-            **STYLES[method],
-        )
-        if accuracy.shape[0] > 1:
-            axis.fill_between(
-                x,
-                np.clip(mean - std, 0.0, 1.0),
-                np.clip(mean + std, 0.0, 1.0),
-                color=COLORS[method],
-                alpha=0.12,
+    roots = {
+        "ravdess": args.ravdess_results_root,
+        "dronerf": args.dronerf_results_root,
+        "mnist": args.mnist_results_root,
+    }
+    if args.dataset == "all":
+        missing_roots = [name for name, root in roots.items() if root is None]
+        if missing_roots:
+            raise ValueError(
+                "--dataset all requires separate result roots for all datasets; "
+                f"missing {missing_roots}"
             )
-
-    if args.target_accuracy is not None:
-        axis.axhline(
-            args.target_accuracy,
-            color="black",
-            linestyle=":",
-            linewidth=1.2,
-            label=f"Target accuracy = {args.target_accuracy:.3f}",
+        if args.summary_output is not None:
+            raise ValueError("--summary-output is only supported for one dataset")
+        datasets = list(DATASETS)
+        output = args.output or Path("experiment4_uplink_triptych.pdf")
+    else:
+        datasets = [args.dataset]
+        roots[args.dataset] = roots[args.dataset] or args.results_root
+        output = args.output or (
+            roots[args.dataset]
+            / f"{args.dataset}_accuracy_vs_cumulative_uplink.pdf"
         )
-    axis.set_xscale(args.xscale)
-    focus_details = None
-    if args.focus_method is not None:
-        focus_limit, focus_peak, first_crossings = _focus_x_limit(
+
+    accuracy_by_dataset: Dict[str, Dict[str, np.ndarray]] = {}
+    cumulative_by_dataset: Dict[str, Dict[str, np.ndarray]] = {}
+    for dataset in datasets:
+        accuracy_by_method: Dict[str, np.ndarray] = {}
+        cumulative_by_method: Dict[str, np.ndarray] = {}
+        reference_config = None
+        reference_path = None
+        for method in METHOD_NAMES:
+            accuracy, cumulative, configs, paths = _collect_communication(
+                roots[dataset], dataset, method, args.seeds, args.max_rounds
+            )
+            accuracy_by_method[method] = accuracy
+            cumulative_by_method[method] = cumulative
+            for config, path in zip(configs, paths):
+                if reference_config is None:
+                    reference_config, reference_path = config, path
+                    continue
+                if _config_signature(config, args.max_rounds) != _config_signature(
+                    reference_config, args.max_rounds
+                ):
+                    difference = _describe_config_difference(
+                        reference_config, config, args.max_rounds
+                    )
+                    raise ValueError(
+                        f"incomparable configurations: {reference_path} vs "
+                        f"{path}: {difference}"
+                    )
+        accuracy_by_dataset[dataset] = accuracy_by_method
+        cumulative_by_dataset[dataset] = cumulative_by_method
+        summary_output = (
+            args.summary_output
+            if len(datasets) == 1 and args.summary_output is not None
+            else roots[dataset] / f"{dataset}_communication_summary.csv"
+        )
+        _write_summary(
+            summary_output,
+            dataset,
+            list(args.seeds),
             accuracy_by_method,
             cumulative_by_method,
-            args.focus_method,
-            divisor,
-            args.focus_padding_fraction,
+            args.target_accuracy,
         )
-        axis.set_xlim(right=focus_limit)
-        focus_details = (focus_limit, focus_peak, first_crossings)
-    if args.x_min is not None:
-        axis.set_xlim(left=args.x_min)
-    axis.set_xlabel(f"Cumulative uplink payload ({unit_label})")
-    axis.set_ylabel("Test accuracy")
-    axis.grid(alpha=0.25, which="both")
-    axis.legend()
-    fig.tight_layout()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, bbox_inches="tight")
-    plt.close(fig)
 
-    _write_summary(
-        summary_output,
-        args.dataset,
-        list(args.seeds),
-        accuracy_by_method,
-        cumulative_by_method,
-        args.target_accuracy,
-    )
+    divisor, unit_label = UNIT_DIVISORS[args.unit]
+    configure_paper_plot_style()
+    if len(datasets) == 3:
+        figure_size = (args.figure_width or 3.39, args.figure_height or 2.40)
+        fig, grid_axes = plt.subplots(2, 2, figsize=figure_size)
+        axes = [grid_axes[0, 0], grid_axes[0, 1], grid_axes[1, 0]]
+        legend_axis = grid_axes[1, 1]
+        legend_axis.axis("off")
+    else:
+        figure_size = (args.figure_width or 3.39, args.figure_height or 2.55)
+        fig, axis = plt.subplots(figsize=figure_size)
+        axes = [axis]
+        legend_axis = None
+
+    focus_by_dataset = {}
+    legend_handles = None
+    legend_labels = None
+    for panel_index, (axis, dataset) in enumerate(zip(axes, datasets)):
+        accuracy_by_method = accuracy_by_dataset[dataset]
+        cumulative_by_method = cumulative_by_dataset[dataset]
+        for method in METHOD_NAMES:
+            accuracy = accuracy_by_method[method]
+            cumulative = cumulative_by_method[method]
+            x = cumulative[0].astype(np.float64) / divisor
+            mean = accuracy.mean(axis=0)
+            std = accuracy.std(axis=0)
+            marker_step = max(1, len(x) // 8)
+            axis.plot(
+                x,
+                mean,
+                label=LABELS[method],
+                linewidth=1.25,
+                markersize=3.0,
+                markevery=marker_step,
+                color=COLORS[method],
+                **STYLES[method],
+            )
+            if accuracy.shape[0] > 1:
+                axis.fill_between(
+                    x,
+                    np.clip(mean - std, 0.0, 1.0),
+                    np.clip(mean + std, 0.0, 1.0),
+                    color=COLORS[method],
+                    alpha=0.12,
+                )
+        if args.target_accuracy is not None:
+            axis.axhline(
+                args.target_accuracy,
+                color="black",
+                linestyle=":",
+                linewidth=1.0,
+                label=f"Target accuracy = {args.target_accuracy:.3f}",
+            )
+        axis.set_xscale(args.xscale)
+        if args.focus_method is not None:
+            focus_details = _focus_x_limit(
+                accuracy_by_method,
+                cumulative_by_method,
+                args.focus_method,
+                divisor,
+                args.focus_padding_fraction,
+            )
+            axis.set_xlim(right=focus_details[0])
+            focus_by_dataset[dataset] = focus_details
+        if args.x_min is not None:
+            axis.set_xlim(left=args.x_min)
+        axis.grid(alpha=0.25, which="both")
+        axis.xaxis.set_major_locator(MaxNLocator(nbins=3))
+        axis.yaxis.set_major_locator(MaxNLocator(nbins=4))
+        axis.tick_params(axis="both", pad=1.5)
+        if len(datasets) == 3:
+            axis.text(
+                0.97,
+                0.06,
+                f"({chr(ord('a') + panel_index)}) {DATASET_TITLES[dataset]}",
+                transform=axis.transAxes,
+                ha="right",
+                va="bottom",
+                bbox={
+                    "facecolor": "white",
+                    "alpha": 0.82,
+                    "edgecolor": "none",
+                    "pad": 0.25,
+                },
+            )
+        else:
+            axis.set_title(DATASET_TITLES[dataset])
+            axis.set_ylabel("Test accuracy")
+        legend_handles, legend_labels = axis.get_legend_handles_labels()
+
+    if len(datasets) == 3:
+        fig.text(
+            0.52,
+            0.01,
+            f"Cumulative uplink payload ({unit_label})",
+            ha="center",
+            va="bottom",
+        )
+        fig.text(0.006, 0.54, "Test accuracy", ha="left", va="center", rotation=90)
+        legend_axis.legend(
+            legend_handles,
+            legend_labels,
+            loc="center",
+            ncol=1,
+            handlelength=1.4,
+            handletextpad=0.35,
+            borderpad=0.30,
+            labelspacing=0.25,
+        )
+        fig.subplots_adjust(
+            left=0.155,
+            right=0.995,
+            top=0.995,
+            bottom=0.13,
+            wspace=0.30,
+            hspace=0.18,
+        )
+    else:
+        axes[0].set_xlabel(f"Cumulative uplink payload ({unit_label})")
+        axes[0].legend()
+        fig.tight_layout()
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
     print(
-        f"validated methods={list(METHOD_NAMES)}, seeds={args.seeds}, "
-        f"rounds={next(iter(accuracy_by_method.values())).shape[1]}"
+        f"validated datasets={datasets}, methods={list(METHOD_NAMES)}, "
+        f"seeds={args.seeds}"
     )
     print("uplink bytes are packed logical payload summed over all clients")
-    if focus_details is not None:
+    for dataset, focus_details in focus_by_dataset.items():
         focus_limit, focus_peak, first_crossings = focus_details
         crossing_text = ", ".join(
             f"{method}={value:.3f} {unit_label}"
             for method, value in first_crossings.items()
         ) or "none"
         print(
-            f"focused on {args.focus_method}: peak mean accuracy={focus_peak:.6f}, "
-            f"xmax={focus_limit:.3f} {unit_label}, first crossings: {crossing_text}"
+            f"{dataset} focused on {args.focus_method}: peak mean "
+            f"accuracy={focus_peak:.6f}, xmax={focus_limit:.3f} {unit_label}, "
+            f"first crossings: {crossing_text}"
         )
     print(f"saved {output}")
     print(f"saved {summary_output}")
