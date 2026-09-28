@@ -1,3 +1,4 @@
 
 **/dronerf_processed/*.npz
 **/ravdess_processed/*.npz
+*.tar.gz
